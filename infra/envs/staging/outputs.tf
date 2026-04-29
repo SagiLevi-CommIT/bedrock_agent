@@ -33,3 +33,27 @@ output "log_group_name" {
 output "task_role_arn" {
   value = module.iam.task_role_arn
 }
+
+output "sessions_table_name" {
+  value = module.data.sessions_table_name
+}
+
+output "cost_table_name" {
+  value = module.data.cost_table_name
+}
+
+output "output_bucket_name" {
+  value = module.data.output_bucket_name
+}
+
+output "athena_results_bucket_name" {
+  value = module.data.athena_results_bucket_name
+}
+
+output "codebuild_project_name" {
+  value = module.codebuild.project_name
+}
+
+output "codebuild_source_bucket_name" {
+  value = module.data.codebuild_source_bucket_name
+}

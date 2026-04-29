@@ -1,0 +1,26 @@
+from src.tools import REGISTRY, converse_tool_config, import_all
+
+
+def test_registry_loaded() -> None:
+    import_all()
+    expected = {
+        "check_aws_connection",
+        "list_databases",
+        "list_tables",
+        "describe_table",
+        "search_tables",
+        "run_athena_query",
+        "explore_s3",
+    }
+    assert expected.issubset(REGISTRY.keys())
+
+
+def test_tool_config_shape() -> None:
+    import_all()
+    cfg = converse_tool_config()
+    assert "tools" in cfg
+    for spec in cfg["tools"]:
+        ts = spec["toolSpec"]
+        assert ts["name"]
+        assert ts["description"]
+        assert ts["inputSchema"]["json"]["type"] == "object"

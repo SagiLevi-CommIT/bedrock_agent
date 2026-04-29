@@ -148,9 +148,8 @@ resource "aws_iam_role_policy" "task_s3_data_readonly" {
 }
 
 resource "aws_iam_role_policy" "task_s3_athena_results" {
-  count = var.athena_results_bucket_arn == "" ? 0 : 1
-  name  = "${var.name_prefix}-task-s3-athena-results"
-  role  = aws_iam_role.task.id
+  name = "${var.name_prefix}-task-s3-athena-results"
+  role = aws_iam_role.task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -166,9 +165,8 @@ resource "aws_iam_role_policy" "task_s3_athena_results" {
 }
 
 resource "aws_iam_role_policy" "task_s3_output_rw" {
-  count = var.output_bucket_arn == "" ? 0 : 1
-  name  = "${var.name_prefix}-task-s3-output-rw"
-  role  = aws_iam_role.task.id
+  name = "${var.name_prefix}-task-s3-output-rw"
+  role = aws_iam_role.task.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -195,7 +193,7 @@ resource "aws_iam_role_policy" "task_logs" {
         "logs:CreateLogStream",
         "logs:PutLogEvents",
       ]
-      Resource = var.log_group_arn == "" ? "*" : "${var.log_group_arn}:*"
+      Resource = "${var.log_group_arn}:*"
     }]
   })
 }

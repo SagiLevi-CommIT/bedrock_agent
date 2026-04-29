@@ -17,14 +17,16 @@ class Settings(BaseSettings):
     aws_profile: str | None = None
 
     bedrock_model_id: str = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    bedrock_fast_model_id: str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
     bedrock_max_tokens: int = 4096
 
     athena_workgroup: str = "primary"
     athena_default_database: str = "migrated_data"
     athena_max_rows: int = 1000
+    athena_results_bucket: str | None = None
 
-    sessions_table: str = "agent-staging-sessions"
-    cost_table: str = "agent-staging-cost-rollup"
+    sessions_table: str = "claude-aws-agent-staging-sessions"
+    cost_table: str = "claude-aws-agent-staging-cost"
     output_bucket: str | None = None
 
     log_level: str = "INFO"
