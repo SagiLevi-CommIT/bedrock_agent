@@ -1,0 +1,41 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - "infra/**"
+      - ".github/workflows/terraform-plan.yml"
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write # for OIDC role assumption (when wired in Phase 7)
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/envs/staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive ../..
+
+      # When OIDC is wired up in Phase 7, this becomes:
+      #   - uses: aws-actions/configure-aws-credentials@v4
+      #     with:
+      #       role-to-assume: arn:aws:iam::<staging-account>:role/gh-actions-tf-plan
+      #       aws-region: eu-central-1
+      # Until then, the job stops at fmt+validate (no real plan).
+
+      - name: terraform init (validate-only)
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        run: terraform validate -no-color

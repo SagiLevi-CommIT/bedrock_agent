@@ -1,0 +1,13 @@
+aws_region          = "eu-central-1"
+aws_profile         = "cardiac-sense-staging-s3"
+expected_account_id = "REPLACE_WITH_STAGING_ACCOUNT_ID"
+
+alarm_email   = "REPLACE_WITH_ON_CALL_EMAIL@cardiacsense.com"
+office_cidrs  = ["REPLACE/32"]
+
+dns_zone_name = ""
+subdomain     = "agent"
+
+image_tag = "REPLACE_WITH_GIT_SHA"
+
+monthly_budget_usd = 200
