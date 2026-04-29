@@ -6,7 +6,7 @@
 **/.venv
 **/venv
 **/node_modules
-**/dist
+ui/dist
 **/.terraform
 **/*.tfstate
 **/*.tfplan

@@ -1,7 +1,18 @@
 # syntax=docker/dockerfile:1.7
-# Build context must be the REPO ROOT, not app/.
+# Build context must be the REPO ROOT.
 # From the repo root run:  docker build -f app/Dockerfile -t agent:dev .
 
+# ---- Stage 1: build the React/Vite SPA ----
+FROM public.ecr.aws/docker/library/node:20-slim AS uibuild
+
+ENV CI=1
+WORKDIR /ui
+COPY ui/package.json ./
+RUN npm install --no-audit --no-fund
+COPY ui/ ./
+RUN npm run build
+
+# ---- Stage 2: Python runtime that serves both /api and the SPA ----
 FROM public.ecr.aws/docker/library/python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
@@ -16,6 +27,7 @@ COPY app/pyproject.toml ./
 COPY app/src ./src
 COPY prompts ./prompts
 COPY knowledge ./knowledge
+COPY --from=uibuild /ui/dist ./ui_dist
 
 RUN pip install --upgrade pip wheel && \
     pip install . && \

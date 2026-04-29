@@ -33,7 +33,7 @@ PROJECT="${PREFIX}-image-build"
 
 echo "==> Packaging source"
 ZIP=$(mktemp -t agent-source-XXXXXX.zip)
-git archive --format=zip --output="$ZIP" HEAD app prompts knowledge
+git archive --format=zip --output="$ZIP" HEAD app ui prompts knowledge
 
 echo "==> Uploading to s3://$SOURCE_BUCKET/source.zip"
 aws --profile "$AWS_PROFILE" --region "$AWS_REGION" \
