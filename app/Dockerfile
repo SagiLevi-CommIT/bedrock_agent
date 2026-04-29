@@ -2,7 +2,7 @@
 # Build context must be the REPO ROOT, not app/.
 # From the repo root run:  docker build -f app/Dockerfile -t agent:dev .
 
-FROM python:3.12-slim AS builder
+FROM public.ecr.aws/docker/library/python:3.12-slim AS builder
 
 ENV PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -13,7 +13,7 @@ COPY app/pyproject.toml ./
 RUN pip install --upgrade pip wheel && \
     pip install --prefix=/install .
 
-FROM python:3.12-slim AS runtime
+FROM public.ecr.aws/docker/library/python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
