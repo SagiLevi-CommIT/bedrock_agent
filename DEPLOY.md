@@ -5,6 +5,9 @@ ALB):
 
 > http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.com
 
+Open that URL in a browser to use the chat UI. The same host serves `/api/*`
+for programmatic access; both share the WAF + ALB.
+
 Account `735555370207` / region `eu-central-1`.
 
 ## Quick checks
@@ -12,12 +15,31 @@ Account `735555370207` / region `eu-central-1`.
 ```bash
 ALB="http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.com"
 
+# UI
+curl -I "$ALB/"
+# 200 text/html (Vite-built SPA)
+
+# API
 curl "$ALB/api/health"
 # {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":7}
 
 curl -X POST "$ALB/api/chat" -H "Content-Type: application/json" \
   -d '{"prompt":"List the Glue databases."}'
 # returns {session_id, text, tool_trace[], usage, iterations, stop_reason, latency_ms}
+```
+
+## UI
+
+Vite + React + TypeScript + Tailwind 4 SPA in `ui/`, built at image-build time
+and copied into `/app/ui_dist`. FastAPI serves `/`, `/assets/*`, and any
+unknown path as `index.html` (SPA fallback). Session id is preserved across
+turns; tool calls collapse into a per-turn debug section.
+
+Local dev:
+
+```bash
+cd app && uvicorn src.main:app --reload --port 8000   # backend
+cd ui  && npm install && npm run dev                  # SPA on :5173, /api → :8000
 ```
 
 ## Re-deploying the app image
