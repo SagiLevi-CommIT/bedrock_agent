@@ -11,7 +11,9 @@ def test_health_returns_ok() -> None:
     body = r.json()
     assert body["status"] == "ok"
     assert body["region"]
-    assert body["model"].startswith("eu.anthropic.claude-")
+    # Model is configurable via BEDROCK_MODEL_ID; default is the desired
+    # Claude profile, runtime may override (see settings.py for the SCP note).
+    assert body["model"]
     assert body["tools"] >= 6
 
 

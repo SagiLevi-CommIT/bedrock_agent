@@ -20,9 +20,27 @@ locals {
   name_prefix = "${var.project}-${var.environment}"
   account_id  = data.aws_caller_identity.current.account_id
 
+  # IAM allow-list for Bedrock invocations.
+  #
+  # Anthropic models are listed but currently **blocked at the org SCP**
+  # (verified 2026-04-29 — `arn:aws:organizations::071204572266:policy/...
+  # /service_control_policy/p-lwuwinuh` denies any anthropic.* foundation-
+  # model invocation). The IAM grant is kept so that the moment the SCP is
+  # updated, no code change is needed.
+  #
+  # Non-Anthropic providers (Mistral, GLM, Qwen, Amazon, OpenAI-OSS) are not
+  # blocked by the SCP. We grant them too so the agent can fall back to a
+  # working chat model.
   bedrock_model_arns = [
-    "arn:aws:bedrock:${var.aws_region}::foundation-model/anthropic.*",
+    "arn:aws:bedrock:*::foundation-model/anthropic.*",
+    "arn:aws:bedrock:*::foundation-model/mistral.*",
+    "arn:aws:bedrock:*::foundation-model/amazon.*",
+    "arn:aws:bedrock:*::foundation-model/cohere.*",
+    "arn:aws:bedrock:*::foundation-model/openai.*",
+    "arn:aws:bedrock:*::foundation-model/qwen.*",
+    "arn:aws:bedrock:*::foundation-model/zai.*",
     "arn:aws:bedrock:${var.aws_region}:${var.expected_account_id}:inference-profile/eu.anthropic.*",
+    "arn:aws:bedrock:${var.aws_region}:${var.expected_account_id}:inference-profile/global.anthropic.*",
   ]
 
   cardiacsense_data_bucket_arns = [
@@ -112,8 +130,17 @@ module "ecs" {
   log_group_name        = module.observability.log_group_name
   env = {
     AWS_REGION              = var.aws_region
-    BEDROCK_MODEL_ID        = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    BEDROCK_FAST_MODEL_ID   = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    # NOTE: An org-level SCP currently denies bedrock:InvokeModel for ALL
+    # `anthropic.*` models in this account, regardless of region/profile
+    # (verified 2026-04-29 against eu, global, and direct profiles for
+    # claude-sonnet-4-5, haiku-4-5, sonnet-4 — every attempt fails with
+    # `explicit deny in a service control policy
+    # arn:aws:organizations::071204572266:policy/o-ld9q2iv86w/service_control_policy/p-lwuwinuh`).
+    # Until the SCP is updated to allow Anthropic in eu-central-1, we use
+    # Mistral devstral-2 as a placeholder so the chat path can be exercised
+    # end-to-end. Restoring Claude is a one-line change here.
+    BEDROCK_MODEL_ID      = "mistral.devstral-2-123b"
+    BEDROCK_FAST_MODEL_ID = "mistral.devstral-2-123b"
     ATHENA_WORKGROUP        = "primary"
     ATHENA_DEFAULT_DATABASE = "migrated_data"
     ATHENA_RESULTS_BUCKET   = module.data.athena_results_bucket_name

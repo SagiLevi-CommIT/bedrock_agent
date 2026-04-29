@@ -57,5 +57,18 @@ def configure_logging(level: str = "INFO") -> None:
     _configured = True
 
 
+_RESERVED = {
+    "name", "msg", "args", "levelname", "levelno", "pathname", "filename",
+    "module", "exc_info", "exc_text", "stack_info", "lineno", "funcName",
+    "created", "msecs", "relativeCreated", "thread", "threadName",
+    "processName", "process", "message", "asctime", "taskName",
+}
+
+
 def log_event(logger_name: str, event: str, **fields: Any) -> None:
-    logging.getLogger(logger_name).info(event, extra=fields)
+    """Emit a structured log line. Field names that collide with reserved
+    LogRecord attributes are auto-renamed with an `_` prefix (Python's
+    logging module rejects extras that overwrite reserved attributes).
+    """
+    safe = {(f"_{k}" if k in _RESERVED else k): v for k, v in fields.items()}
+    logging.getLogger(logger_name).info(event, extra=safe)

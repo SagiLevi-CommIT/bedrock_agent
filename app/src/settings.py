@@ -16,8 +16,11 @@ class Settings(BaseSettings):
     aws_region: str = "eu-central-1"
     aws_profile: str | None = None
 
-    bedrock_model_id: str = "eu.anthropic.claude-sonnet-4-5-20250929-v1:0"
-    bedrock_fast_model_id: str = "eu.anthropic.claude-haiku-4-5-20251001-v1:0"
+    # Default kept as the desired Claude model so anyone running locally with
+    # the right SCP gets the right behavior. Production env var overrides
+    # this until the org SCP is updated to permit Anthropic.
+    bedrock_model_id: str = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+    bedrock_fast_model_id: str = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
     bedrock_max_tokens: int = 4096
 
     athena_workgroup: str = "primary"
