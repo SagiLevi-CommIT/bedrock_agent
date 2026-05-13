@@ -6,7 +6,7 @@ boto3 tools ported from `claude_aws_agent`. eu-central-1, staging only.
 
 ## Hard constraints
 - **Never touch the production AWS account.** Every `aws ...` or Terraform call
-  must target the staging account/profile (`cardiac-sense-staging-s3`).
+  must target the staging account (use profile `cardiac-sense-staging` for Terraform, CodeBuild, ECS, Athena, and Secrets Manager; avoid `cardiac-sense-staging-s3` for deploys — it maps to a narrow S3-oriented principal).
 - **Read-only data access.** The task role has no `glue:Create*`, no
   `s3:Delete*` on data buckets, no `dynamodb:DeleteTable`, and no IAM mutation.
   Writes are limited to the agent's own output S3 bucket and its DynamoDB

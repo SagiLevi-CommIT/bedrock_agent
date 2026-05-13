@@ -6,13 +6,13 @@
 #   image_tag defaults to the short git SHA.
 #
 # Environment:
-#   AWS_PROFILE      (default: cardiac-sense-staging-s3)
+#   AWS_PROFILE      (default: cardiac-sense-staging)
 #   AWS_REGION       (default: eu-central-1)
 #   PROJECT_PREFIX   (default: claude-aws-agent-staging)
 
 set -euo pipefail
 
-AWS_PROFILE="${AWS_PROFILE:-cardiac-sense-staging-s3}"
+AWS_PROFILE="${AWS_PROFILE:-cardiac-sense-staging}"
 AWS_REGION="${AWS_REGION:-eu-central-1}"
 PREFIX="${PROJECT_PREFIX:-claude-aws-agent-staging}"
 TAG="${1:-$(git rev-parse --short=8 HEAD)}"
