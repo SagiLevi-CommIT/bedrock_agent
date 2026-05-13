@@ -1,3 +1,14 @@
+# Copy this file to `terraform.tfvars` in the same directory. That file is
+# gitignored — each operator maintains their own alarm email, office CIDRs,
+# and rolling `image_tag`.
+#
+# After `bash scripts/build_and_push.sh`, set `image_tag` to the printed 8-char
+# git SHA (example validated on staging: `6865802c` with task def revision 22).
+#
+# `aws_profile` must be a principal that can run Terraform + CodeBuild + ECS
+# (typically `cardiac-sense-staging`). Override for one command:
+#   terraform apply -var="aws_profile=cardiac-sense-staging"
+
 aws_region          = "eu-central-1"
 aws_profile         = "cardiac-sense-staging"
 expected_account_id = "REPLACE_WITH_STAGING_ACCOUNT_ID"

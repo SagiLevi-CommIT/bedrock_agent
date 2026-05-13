@@ -34,7 +34,7 @@ variable "aws_region" {
 
 variable "aws_profile" {
   type        = string
-  description = "Local AWS profile to use for bootstrap apply (typically cardiac-sense-staging-s3)."
+  description = "Local AWS profile to use for bootstrap apply (use cardiac-sense-staging for a principal that can create S3 and DynamoDB)."
   default     = null
 }
 

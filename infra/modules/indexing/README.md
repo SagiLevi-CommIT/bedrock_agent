@@ -51,7 +51,7 @@ module "indexing" {
 aws lambda invoke \
   --function-name claude-aws-agent-staging-refresh-daily-rollup \
   --payload '{"date":"2026-04-15"}' \
-  --profile cardiac-sense-staging-s3 \
+  --profile cardiac-sense-staging \
   out.json
 ```
 

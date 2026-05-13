@@ -1,30 +1,67 @@
 # Deployment runbook (staging)
 
-Live URL (HTTP, IP-allowlisted by WAF — only `199.203.119.181/32` reaches the
-ALB):
+Live URL (HTTP, IP-allowlisted by WAF — office CIDRs in `terraform.tfvars`
+`office_cidrs` reach the ALB):
 
 > http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.com
 
 Open that URL in a browser to use the chat UI. The same host serves `/api/*`
 for programmatic access; both share the WAF + ALB.
 
-Account `735555370207` / region `eu-central-1`.
+**Account:** `735555370207`  
+**Region:** `eu-central-1`  
+**AWS CLI profile (operators):** `cardiac-sense-staging` — use this for Terraform,
+CodeBuild, ECS, Athena, Secrets Manager, and IAM reads needed by plans.
+
+## Current validated deployment (staging)
+
+As of **2026-05-13** the stack was applied and smoke-tested end-to-end:
+
+| Check | Result |
+|--------|--------|
+| **ECR image tag** | `6865802c` |
+| **ECS task definition** | `claude-aws-agent-staging-task:22` |
+| **`GET /api/health`** | `tools` **28**, model `mistral.devstral-2-123b` |
+| **`GET /api/info`** | Sorted list of all **28** tool names (same registry as health) |
+| **Athena scan guard** | Live: `run_athena_query` returned `BLOCKED:` when estimated scan exceeded `ATHENA_MAX_SCAN_GB_DEFAULT` without `confirm_heavy_scan=true` |
+| **`record_run_advice`** | Live: wrote markdown under `s3://…/advice/raw/…` in the agent output bucket |
+| **`scripts/sync_advice.py --dry-run`** | Live: listed keys under `advice/raw/` using staging credentials |
+
+Teammates: keep **local** `infra/envs/staging/terraform.tfvars` aligned (that file is **gitignored**). Copy from `terraform.tfvars.example` and set `aws_profile` and `image_tag` after each CodeBuild. You can override profile on one shot with:
+
+```bash
+terraform apply -var="aws_profile=cardiac-sense-staging"
+```
+
+On **PowerShell**, always quote the backend file when initializing:
+
+```powershell
+terraform init -input=false "-backend-config=backend.hcl"
+```
+
+Use **`curl.exe`** (not `curl`) for quick HTTP checks so the request is not handled by `Invoke-WebRequest`.
 
 ## Quick checks
 
 ```bash
+export AWS_PROFILE=cardiac-sense-staging
+export AWS_DEFAULT_REGION=eu-central-1
+
 ALB="http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.com"
 
 # UI
-curl -I "$ALB/"
+curl.exe -I "$ALB/"
 # 200 text/html (Vite-built SPA)
 
-# API
-curl "$ALB/api/health"
-# {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":7}
+# API — expect tools: 28
+curl.exe "$ALB/api/health"
+# {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":28}
 
-curl -X POST "$ALB/api/chat" -H "Content-Type: application/json" \
-  -d '{"prompt":"List the Glue databases."}'
+curl.exe "$ALB/api/info"
+# {"service":"bedrock_agent","phase":"ui","tools":[ ... 28 sorted names ... ]}
+
+curl.exe -X POST "$ALB/api/chat" -H "Content-Type: application/json" \
+  -d "{\"prompt\":\"Call check_aws_connection and reply in one sentence.\"}"
 # returns {session_id, text, tool_trace[], usage, iterations, stop_reason, latency_ms}
 ```
 
@@ -47,13 +84,23 @@ cd ui  && npm install && npm run dev                  # SPA on :5173, /api → :
 No local Docker is required — builds run in **AWS CodeBuild**.
 
 ```bash
-git commit ...                        # land your change
-bash scripts/build_and_push.sh        # zips repo, uploads to S3, runs CodeBuild
-                                      # → echoes the new image_tag (8-char SHA)
-# then update infra/envs/staging/terraform.tfvars: image_tag = "<sha>"
+export AWS_PROFILE=cardiac-sense-staging   # default in scripts/build_and_push.sh
+git commit ...                             # land your change
+bash scripts/build_and_push.sh             # zips app+ui+prompts+knowledge+skills → S3 → CodeBuild
+                                           # prints the new image_tag (8-char git SHA)
+
+# Edit local (gitignored) infra/envs/staging/terraform.tfvars:
+#   image_tag = "<sha-from-CodeBuild>"
 cd infra/envs/staging
+terraform init -input=false -backend-config=backend.hcl   # once per machine
 terraform apply
+aws ecs wait services-stable \
+  --cluster claude-aws-agent-staging-cluster \
+  --services claude-aws-agent-staging-svc
 ```
+
+Windows **PowerShell** one-liner alternative for CodeBuild (same as `build_and_push.sh`): see
+`scripts/deploy_staging.ps1` (`-AwsProfile` defaults to `cardiac-sense-staging`).
 
 Rolling back is the same flow with a previous SHA. Image tags are immutable;
 ECR keeps the last 20.
@@ -66,14 +113,14 @@ ECR keeps the last 20.
 > the Global profile, and direct foundation-model ARNs for Sonnet 4.5,
 > Haiku 4.5, and Sonnet 4.
 
-We selected this Bedrock model for the live container:
+**Live chat model in staging** (not blocked by the SCP):
 
 ```
-mistral.devstral-2-123b   (eu-central-1, in-region, no SCP block)
+mistral.devstral-2-123b   (eu-central-1, in-region)
 ```
 
-**The whole codebase is set up to swap back to Claude with a single
-`terraform.tfvars` change** (the IAM grant already covers `anthropic.*`):
+**The codebase is set up to swap to Claude with a `terraform.tfvars` / env
+change** (the IAM grant already covers `anthropic.*`):
 
 1. Ask AWS Org admin to update the SCP to allow `bedrock:InvokeModel` on
    `arn:aws:bedrock:*::foundation-model/anthropic.*` for account
@@ -88,16 +135,13 @@ mistral.devstral-2-123b   (eu-central-1, in-region, no SCP block)
 
 The IAM allow-list under `module.iam` already permits Anthropic, Mistral,
 Amazon, Cohere, OpenAI-OSS, Qwen, and ZAI providers — switching providers is
-purely an env-var change.
+primarily an env-var change once the SCP allows it.
 
-## Tools live today (7)
+## Tool registry (28)
 
-`check_aws_connection`, `list_databases`, `list_tables`, `describe_table`,
-`search_tables`, `run_athena_query`, `explore_s3`.
-
-Add more by porting from `claude_aws_agent/tools/` into `app/src/tools/`;
-the `@tool` decorator + `import_all()` in `app/src/tools/__init__.py` picks
-them up at startup.
+Authoritative list: **`GET /api/info`** (sorted names) or **`len(REGISTRY)`**
+via **`GET /api/health`** (`tools` field). Implementations live under
+`app/src/tools/` and are registered in `app/src/tools/__init__.py`.
 
 ## Outputs of the staging stack
 
@@ -144,12 +188,15 @@ fields input_tokens, output_tokens
   needs access.
 - **HTTPS** (P1): create an ACM cert + Route53 record, set
   `module.alb.certificate_arn` to switch the listener to TLS 1.3.
-- **Tools** (P2): port the remaining 11 tools from `claude_aws_agent/tools/`
-  (`s3_search`, `s3_download`, `s3_knowledge`, `catalog_lookup`,
-  `athena_views`, `learning`, `export`, `build_manifest`, `generate_report`,
-  `get_session_summary`, `check_aws_connection` is already done).
-- **Knowledge bake** (P2): bake the 15 `knowledge/*` files from
-  `claude_aws_agent` into the prompt with `cache_control: ephemeral` for
-  Bedrock prompt caching once Claude is back.
+- **Knowledge / skills** (P2): expand curated lessons and prompt caching once
+  Claude is available in-region.
 - **Production env** (P3): create `infra/envs/prod/` mirroring staging with
   larger sizing, real auth, and read-only IAM until verified.
+
+## Legacy AWS profile name (do not use for deploys)
+
+Older copies of runbooks referenced **`cardiac-sense-staging-s3`**. That name
+was tied to a **narrow IAM user** (`accessS3`) suitable for limited S3 access
+only — it **cannot** run Terraform plans, CodeBuild, `secretsmanager:DescribeSecret`,
+Glue catalog reads needed by apply, or ECS management. **All operator docs and
+scripts in this repo now standardize on `cardiac-sense-staging`.**

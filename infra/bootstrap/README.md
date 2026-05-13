@@ -11,7 +11,7 @@ cd infra/bootstrap
 terraform init
 terraform apply \
   -var="state_bucket_name=tfstate-cardiacsense-staging-<account-id>" \
-  -var="aws_profile=cardiac-sense-staging-s3"
+  -var="aws_profile=cardiac-sense-staging"
 ```
 
 After apply, use the outputs to populate `infra/envs/staging/backend.hcl`.
