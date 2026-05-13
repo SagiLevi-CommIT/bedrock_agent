@@ -1,5 +1,5 @@
 aws_region          = "eu-central-1"
-aws_profile         = "cardiac-sense-staging-s3"
+aws_profile         = "cardiac-sense-staging"
 expected_account_id = "REPLACE_WITH_STAGING_ACCOUNT_ID"
 
 alarm_email   = "REPLACE_WITH_ON_CALL_EMAIL@cardiacsense.com"
