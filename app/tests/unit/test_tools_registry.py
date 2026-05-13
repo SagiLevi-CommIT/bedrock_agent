@@ -1,3 +1,5 @@
+"""Registry contains all Converse tools after import_all."""
+
 from src.tools import REGISTRY, converse_tool_config, import_all
 
 
@@ -10,9 +12,30 @@ def test_registry_loaded() -> None:
         "describe_table",
         "search_tables",
         "run_athena_query",
+        "estimate_athena_scan",
         "explore_s3",
+        "presign_s3_object",
+        "list_skills",
+        "read_skill",
+        "read_knowledge",
+        "resolve_patient_uuid",
+        "latest_data_date_for_patient",
+        "parse_app_events_key",
+        "list_patient_files",
+        "find_patient_last_upload",
+        "patient_usage_summary",
+        "merge_patient_window",
+        "list_arrhythmia_labels",
+        "search_files_with_arrhythmia_events",
+        "probe_file_time_range",
+        "probe_files_batch",
+        "find_rt_flow_files_in_window",
+        "coverage_report_from_athena",
+        "record_run_advice",
+        "list_playbooks",
+        "get_playbook",
     }
-    assert expected.issubset(REGISTRY.keys())
+    assert expected == set(REGISTRY.keys())
 
 
 def test_tool_config_shape() -> None:

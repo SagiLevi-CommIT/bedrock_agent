@@ -1,0 +1,59 @@
+description: How to query and reason about POST-COMPUTATION data (Cardiolyse-enriched timeseries). Load when the user asks about derived ECG metrics, Cardiolyse outputs, perfusion index, stroke volume, PWV, PTT, or rhythm annotations.
+version: 1
+
+stage: post_computation
+prefix: s3://735555370207-app-events/post-computation-layer/{flow}/
+file_pattern_data: "{flow}_{patient_id}_{epoch_ms}.csv (23 cols, all string in Athena)"
+file_pattern_summary: "{flow}_{patient_id}_{epoch_ms}.json (12-25 MB per session)"
+file_pattern_avg: "{flow}_{patient_id}_{epoch_ms}-avg-values.csv (tiny, per-session averages)"
+
+flows_present_at_this_stage:
+  - rt_flow         # main use case
+  - arrythmia_flow  # tiny — only 1 known patient (431) with 1 recording
+  - plate_flow      # ~728 keys ≈ 240 sessions
+  # NOT present: sleep_flow, ar_flow, af_ppg_flow, tachycardia_flow, algos_flow
+
+glue_tables:
+  rt_flow:
+    primary: cardiacsense.rt_flow_post   # 23 cols, OpenCSVSerde, ALL STRING, NO partition
+    notes: |
+      Every column is typed `string`. Cast on use. No partition — full S3 prefix scan on every query.
+      For most analytics, prefer migrated_data.pc_timeseries (partitioned, typed).
+  other_flows:
+    glue_table: NONE   # arrythmia_flow and plate_flow have post-comp files in S3 but no Glue tables. Use S3 + parse the JSON.
+
+cardiolyse_columns:
+  in_rt_flow_post:                        # underscore form
+    - crlyse_hr           # heart rate from Cardiolyse pipeline (bpm, cast to DOUBLE)
+    - crlyse_annotation   # rhythm classification: NSR / AF / VT / etc.
+    - crlyse_rythem_events  # event sequence string ('rythem' is the actual misspelling)
+  in_pc_timeseries:                       # HYPHENATED — backticks required in Athena!
+    - "`crlyse-hr`"
+    - "`crlyse-annotation`"
+    - "`crlyse-rythem_events`"
+
+other_derived_columns:
+  - perfusion_index   # %, range 0.02–20
+  - stroke_volume     # mL, range 30–100+
+  - ptt               # ms, range 100–400
+  - ptt_ecg2ir        # ms
+  - pwv_ecg2ir        # m/s, range 4–12
+  - pwvc_ecg2ir       # m/s, corrected
+  - pertrubations     # int (note: misspelled column name)
+  - sp_o2             # %, range 70–100
+
+decision_tree:
+  - condition: User wants Cardiolyse rhythm annotation for a specific patient/session
+    do: Athena migrated_data.pc_timeseries WHERE date=<...> AND patient='<UUID>' AND `crlyse-annotation` IS NOT NULL. (pc_timeseries is partitioned + typed.)
+  - condition: User has integer patient_id (not UUID) and wants Cardiolyse output for a specific session
+    do: Find the rt_flow_{patient_id}_{epoch_ms}.csv key in post-computation-layer/rt_flow/ and either (a) probe + read the CSV, or (b) map integer→UUID via metadata table and then query pc_timeseries.
+  - condition: User wants HR distribution / aggregate
+    do: Use migrated_data.pc_results_part (session-level rollup, partitioned, fast). Don't use rt_flow_post for aggregates.
+  - condition: User wants the per-session AVG values quickly
+    do: Read the {flow}_{patient_id}_{epoch_ms}-avg-values.csv directly via S3 (1 KB).
+
+cost_warnings:
+  - "cardiacsense.rt_flow_post is OpenCSVSerde all-string and unpartitioned. Casting + filtering is done at scan time. Avoid for cross-cutting queries."
+  - "JSON summary files are large (12-25 MB). Don't load them into the chat; download via presign_s3_object instead."
+
+related_skills: [rearrangement_skill, athena_cost_rules, signal_columns]

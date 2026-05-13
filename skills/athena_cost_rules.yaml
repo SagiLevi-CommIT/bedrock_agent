@@ -1,0 +1,67 @@
+description: Hard rules for keeping Athena queries cheap and safe. Load before constructing ANY Athena SQL.
+version: 1
+
+partition_required_tables:
+  - table: migrated_data.pc_results_part
+    partition: { column: date, type: DATE }
+    syntax_example: "WHERE date = DATE '2026-04-15'"
+  - table: migrated_data.pc_timeseries
+    partition: { column: date, type: DATE }
+    syntax_example: "WHERE date BETWEEN DATE '2026-04-01' AND DATE '2026-04-15'"
+  - table: migrated_data.timeseries
+    partition: { column: date, type: STRING }
+    syntax_example: "WHERE date = '2026-04-15'"
+  - table: migrated_data.processed
+    partition: { columns: [date, patient], type: STRING }
+    syntax_example: "WHERE date = '2026-04-15' AND patient = '<UUID>'"
+    notes: filter on BOTH columns for max efficiency
+  - table: migrated_data.processed1
+    partition: { columns: [date, patient], type: STRING }
+    syntax_example: "WHERE date = '2026-04-15' AND patient = '<UUID>'"
+  - table: migrated_data.curated
+    partition: { column: session, type: STRING }
+    syntax_example: "WHERE session = '<UUID>'"
+
+unpartitioned_tables_full_scan:
+  - migrated_data.metadata        # 70 cols, ~215K rows. Use sparingly.
+  - migrated_data.pc_results      # NEVER use — pc_results_part is the partitioned version
+  - cardiacsense.rt_flow          # full S3 scan over rearrangement/rt_flow/
+  - cardiacsense.rt_flow_post     # full S3 scan over post-computation-layer/rt_flow/
+  - cardiacsense.rt_flow_rearrangement  # AVOID entirely — stale view
+  - eventdata.events              # broken (Parquet declared but CSV)
+  - eventdata.events_test
+  - default.rt_flow_metadata      # full scan, but small table
+
+partition_type_pitfalls:
+  - rule: "DATE-typed partition columns require DATE literals: WHERE date = DATE '2026-04-15'"
+    affected: [pc_results_part, pc_timeseries]
+    wrong: "WHERE date = '2026-04-15'   -- TYPE_MISMATCH varchar vs date"
+  - rule: "STRING-typed partition columns require string literals: WHERE date = '2026-04-15'"
+    affected: [timeseries, processed, processed1]
+    wrong: "WHERE date = DATE '2026-04-15'   -- TYPE_MISMATCH date vs varchar"
+
+cost_guardrails:
+  default_limit: 1000              # appended automatically by run_athena_query if missing
+  max_unfiltered_scan_gb: 1.0      # warn if scan exceeds this without explanation
+  refuse_if_no_partition_filter:
+    - migrated_data.pc_results_part
+    - migrated_data.pc_timeseries
+    - migrated_data.timeseries
+    - migrated_data.processed
+    - migrated_data.processed1
+  bogus_date_filter: "AND date != '2000-01-01'"   # filter out malformed test partitions
+
+select_star_rule: |
+  Avoid SELECT *. Always project the columns you need. With Parquet tables this dramatically reduces scan bytes (column-oriented).
+
+ordering_and_limit:
+  - "Always include ORDER BY when the user asks for 'last', 'first', 'top', or any ranking."
+  - "Always include LIMIT when sample-level queries could return millions of rows (timeseries, pc_timeseries, processed)."
+  - "For aggregates, GROUP BY first then ORDER BY agg DESC."
+
+cross_table_joins:
+  - "session is the universal join key across migrated_data tables. Join pc_results_part to metadata via session."
+  - "patient (UUID) joins across migrated_data tables but NOT to integer-IDed tables (rearrangement, processed, eventdata)."
+  - "Joining DATE-partitioned and STRING-partitioned tables in one query: cast one side. Prefer doing date filter on each side separately, then join."
+
+related_skills: [naming_conventions, flow_decision_tree-equivalent, limitations]

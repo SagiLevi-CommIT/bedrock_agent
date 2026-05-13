@@ -46,3 +46,9 @@ variable "secret_arns" {
   description = "Secrets Manager secrets the EXECUTION role may read (for env injection)."
   default     = []
 }
+
+variable "task_secret_arns" {
+  type        = list(string)
+  description = "Secrets Manager secrets the running container can read at runtime (e.g. for the Patients API token resolved by the resolve_patient_uuid tool)."
+  default     = []
+}

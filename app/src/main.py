@@ -9,10 +9,29 @@ Routes:
 """
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+_SCANNED_BYTES_RE = re.compile(r"scanned_bytes=(\d+)")
+
+
+def _sum_athena_scanned_bytes(tool_trace: list[dict[str, Any]]) -> int:
+    """Extract scanned_bytes=N markers from each Athena tool result and sum.
+
+    The Athena tool emits 'scanned_bytes={N}' in its returned text. This is the
+    most direct way to roll up Athena cost per turn without a side channel.
+    """
+    total = 0
+    for entry in tool_trace:
+        if entry.get("name") != "run_athena_query":
+            continue
+        m = _SCANNED_BYTES_RE.search(entry.get("result", ""))
+        if m:
+            total += int(m.group(1))
+    return total
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -22,8 +41,49 @@ from pydantic import BaseModel, Field
 from .audit import configure_logging, log_event
 from .converse_loop import converse
 from .session_store import append_turn, load_history, new_session_id, next_turn_index
-from .settings import get_settings
+from .settings import get_aws_session, get_settings
 from .tools import REGISTRY, import_all
+
+
+def _persist_cost_record(
+    request_id: str,
+    session_id: str,
+    latency_ms: int,
+    usage: dict[str, int],
+    iterations: int,
+    stop_reason: str,
+    tools_called: int,
+    athena_bytes_scanned: int,
+) -> None:
+    """Write per-request cost rollup to DynamoDB cost_table. Best-effort —
+    failures are logged but do not affect the chat response."""
+    s = get_settings()
+    try:
+        ddb = get_aws_session().resource("dynamodb")
+        ddb.Table(s.cost_table).put_item(
+            Item={
+                "request_id": request_id,
+                "session_id": session_id,
+                "created_at": int(time.time()),
+                "latency_ms": int(latency_ms),
+                "input_tokens": int(usage.get("input_tokens", 0)),
+                "output_tokens": int(usage.get("output_tokens", 0)),
+                "iterations": int(iterations),
+                "stop_reason": stop_reason,
+                "tools_called": int(tools_called),
+                "athena_bytes_scanned": int(athena_bytes_scanned),
+                # Keep the raw cost row for ~30 days then expire.
+                "ttl": int(time.time()) + 30 * 24 * 3600,
+            }
+        )
+    except Exception as e:  # noqa: BLE001 - cost write is best-effort
+        log_event(
+            "agent.cost_persist_failed",
+            "ddb_put_failed",
+            request_id=request_id,
+            error=type(e).__name__,
+            detail=str(e)[:300],
+        )
 
 configure_logging(get_settings().log_level)
 import_all()
@@ -93,7 +153,7 @@ def chat(req: ChatRequest) -> ChatResponse:
         history.append(user_msg)
         append_turn(sid, turn, "user", user_msg["content"])
 
-        result = converse(history, request_id=request_id)
+        result = converse(history, request_id=request_id, session_id=sid)
 
         # Persist every assistant + tool_result message produced this turn.
         for offset, msg in enumerate(result["messages"][turn + 1 :], start=1):
@@ -110,6 +170,7 @@ def chat(req: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail=f"{type(e).__name__}: {e}") from e
 
     latency_ms = round((time.time() - t0) * 1000)
+    athena_bytes_scanned = _sum_athena_scanned_bytes(result["tool_trace"])
     log_event(
         "agent.cost",
         "chat_complete",
@@ -121,6 +182,17 @@ def chat(req: ChatRequest) -> ChatResponse:
         iterations=result["iterations"],
         stop_reason=result["stop_reason"],
         tools_called=len(result["tool_trace"]),
+        athena_bytes_scanned=athena_bytes_scanned,
+    )
+    _persist_cost_record(
+        request_id=request_id,
+        session_id=sid,
+        latency_ms=latency_ms,
+        usage=result["usage"],
+        iterations=result["iterations"],
+        stop_reason=result["stop_reason"],
+        tools_called=len(result["tool_trace"]),
+        athena_bytes_scanned=athena_bytes_scanned,
     )
     return ChatResponse(
         session_id=sid,

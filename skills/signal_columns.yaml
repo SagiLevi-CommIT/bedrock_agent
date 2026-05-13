@@ -1,0 +1,89 @@
+description: Per-column reference for signal columns the agent filters and aggregates on. Lookup of meaning + plausible range + sentinel values + table-specific name variants. Load when the user mentions a specific signal/column.
+version: 1
+
+# This file is a quick lookup. The full reference lives in knowledge/column_profiles.md.
+# Only the columns most often used in queries are listed here.
+
+heart_rate:
+  meanings:
+    hr_ppg: heart rate from PPG (optical sensor)
+    hr_ecg: heart rate from ECG (electrical leads, more accurate when lead_state=1)
+    hr: session-level average HR (in pc_results_part)
+    crlyse_hr: Cardiolyse-pipeline HR (rt_flow post-comp)
+    "`crlyse-hr`": Cardiolyse HR in pc_timeseries (HYPHENATED — backticks required)
+  plausible_range_bpm: [30, 220]
+  sentinels: [0, NULL]
+  filter_template: "AND hr BETWEEN 30 AND 220"
+
+spo2:
+  meanings:
+    sp_o2: in cardiacsense.rt_flow / rt_flow_post / migrated_data.timeseries (underscore!)
+    spo2: in migrated_data.pc_results_part (no underscore, FLOAT)
+  plausible_range_percent: [70, 100]
+  sentinels: [0, NULL]
+  filter_template: "AND spo2 BETWEEN 70 AND 100"
+  warning: column name varies by table
+
+ecg_quality:
+  meanings:
+    qulity_ecg:
+      in_timeseries: int enum (0/1/...) — note misspelling
+      in_rt_flow:    string (raw CSV)
+    sqi: signal quality index in processed/processed1, double, higher=better
+    lead_state: 0=lead off, 1=good contact (timeseries int)
+  filter_for_clean_signal: |
+    For migrated_data.timeseries:  WHERE qulity_ecg IS NOT NULL AND lead_state = 1 AND artifact = 0
+    For migrated_data.processed:   WHERE sqi > 0.7
+
+cardiolyse_annotation:
+  meanings:
+    crlyse_annotation:
+      in_rt_flow_post: string column, no backticks needed
+      "`crlyse-annotation`": same in pc_timeseries, HYPHENATED — backticks required
+  enum_values: ['NSR', 'AF', 'VT', 'unknown', '']    # 'NSR' = Normal Sinus Rhythm
+  filter_template: "AND `crlyse-annotation` NOT IN ('NSR', '') AND `crlyse-annotation` IS NOT NULL"
+
+af_flag:
+  meanings:
+    af: integer flag in pc_results_part — 1 if AFib detected anywhere in the session
+    ppg_af: per-sample AF flag in timeseries (int)
+    ecg_afib_episode: per-sample AFib flag in timeseries (int)
+  filter_template: "AND af = 1"
+
+artifact_and_quality:
+  meanings:
+    artifact: per-sample artifact int flag (timeseries) / float % (metadata)
+    artifact_flag: aggregated artifact flag
+    tightnes: 0.0–1.0, watch tightness (PPG reliability proxy)
+    tightnes_level: int enum (0..3)
+    looseness: inverse of tightnes (in metadata)
+    snr: signal-to-noise ratio (in metadata, dB)
+    low_snr: 0/1 flag in timeseries
+
+hrv_metrics_pc_results_part:
+  notes: All in pc_results_part, FLOAT, session-level
+  metrics: [sdnn, rmssd, pnn20, pnn50, hf, hfn, lf, lfn, vlf, vlf_hf, sdsd, total_power, triangular_index, dfa, fractal_index, entropy, stress_index]
+
+cardiac_intervals_pc_results_part:
+  notes: ECG-derived, FLOAT, milliseconds (except qtc/qtcf which are corrected QT)
+  metrics:
+    pr_interval: 100..300 ms; >200 = 1st-degree AV block
+    qrs_duration: 60..140 ms; >120 = wide QRS / BBB
+    qt_interval: 300..500 ms
+    qtc: 350..470 ms (Bazett)
+    qtcf: 350..470 ms (Fridericia)
+
+cardiolyse_health_scores_pc_results_part:
+  notes: Carsiolyse algorithm outputs; the `carsiolyse_version` column tracks algorithm version.
+  scores: [emotional, stress, stamina, myocardium, overall, heart_rhythm_disturbances, risk_cardiovascular_events, heart_biological_age]
+  warning: heart_biological_age is a STRING ("45Y"). Parse with regex.
+
+device_metadata_columns:
+  watch_id_only_in: default.rt_flow_metadata   # NOT in migrated_data.metadata
+  fe_version: firmware front-end version (string, semver-ish)
+  be_version: firmware back-end version (string, semver-ish)
+  hardware_version: physical watch revision
+  rearangment_version: rearrangement algorithm version (note misspelling)
+  carsiolyse_version: Cardiolyse algorithm version (in pc_results_part)
+
+related_skills: [post_computation_skill, athena_cost_rules, cross_cutting_recipes]

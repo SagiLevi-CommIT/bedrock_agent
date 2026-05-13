@@ -1,0 +1,102 @@
+description: Recipes for cross-cutting / population-level / anomaly questions across many patients or sessions. Load when the user asks about trends, baselines, anomalies, version-effects, or "is X happening to everyone?"
+version: 1
+
+recipes:
+
+  patient_baseline_vs_today:
+    triggers: ["unusual today", "different from normal", "anomalous", "spike", "drop"]
+    inputs: [patient_uuid, metric, baseline_window_days, recent_window_days]
+    notes: "Use migrated_data.pc_timeseries (LIVE). Available metrics: hr_ecg, hr_ppg, perfusion_index, stroke_volume, ptt, pwv_ecg2ir, pertrubations. For SpO2 swap table to migrated_data.timeseries (col sp_o2)."
+    steps:
+      - sql: |
+          WITH baseline AS (
+            SELECT AVG({metric}) AS mean, STDDEV({metric}) AS std
+            FROM migrated_data.pc_timeseries
+            WHERE date BETWEEN current_date - interval '{baseline_window_days}' day
+                            AND current_date - interval '{recent_window_days}' day
+              AND patient = '{patient_uuid}'
+              AND {metric} IS NOT NULL
+          ), recent AS (
+            SELECT date, AVG({metric}) AS daily_avg
+            FROM migrated_data.pc_timeseries
+            WHERE date >= current_date - interval '{recent_window_days}' day
+              AND patient = '{patient_uuid}'
+              AND {metric} IS NOT NULL
+            GROUP BY date
+          )
+          SELECT recent.date, recent.daily_avg,
+                 (recent.daily_avg - baseline.mean) / NULLIF(baseline.std, 0) AS z_score
+          FROM recent CROSS JOIN baseline
+          ORDER BY date DESC
+      - rule: "Flag any |z_score| > 2 as anomalous. Include baseline mean ± std in the response."
+
+  cohort_trend_by_firmware:
+    triggers: ["new firmware", "version causing", "is the latest update", "regression"]
+    inputs: [metric, days, version_column]
+    steps:
+      - sql: |
+          SELECT m.{version_column} AS version,
+                 COUNT(DISTINCT pc.patient) AS patient_count,
+                 COUNT(DISTINCT pc.session) AS session_count,
+                 AVG(pc.{metric}) AS mean,
+                 STDDEV(pc.{metric}) AS std,
+                 APPROX_PERCENTILE(pc.{metric}, 0.5) AS p50,
+                 APPROX_PERCENTILE(pc.{metric}, 0.95) AS p95
+          FROM migrated_data.pc_results_part pc
+          JOIN migrated_data.metadata m ON pc.session = m.session
+          WHERE pc.date >= current_date - interval '{days}' day
+            AND pc.{metric} IS NOT NULL
+          GROUP BY m.{version_column}
+          ORDER BY version DESC
+      - rule: "Compare top-2 versions. If mean differs by more than 1 std AND patient_count > 10 in both, flag as suspicious."
+    notes: |
+      version_column ∈ {fe_version, be_version, hardware_version, rearangment_version, carsiolyse_version}.
+      metadata is NOT partitioned — this query does a full scan on metadata. Acceptable for a one-shot
+      cohort question; not for repeated invocations.
+
+  ecg_event_population_today:
+    triggers: ["how many AFib", "events today", "patient population events"]
+    inputs: [days, event_filter]
+    steps:
+      - sql: |
+          SELECT date, file_type,
+                 COUNT(*) AS event_count,
+                 COUNT(DISTINCT patient) AS patients_affected
+          FROM migrated_data.pc_timeseries
+          WHERE date >= current_date - interval '{days}' day
+            AND `crlyse-annotation` IS NOT NULL
+            AND `crlyse-annotation` NOT IN ('NSR', '')
+            AND file_type = 'rt_flow'
+          GROUP BY date, file_type
+          ORDER BY date DESC
+
+  sleep_quality_trend:
+    triggers: ["sleep quality", "sleep last week", "snoring trend"]
+    inputs: [patient_uuid_or_pid, days]
+    steps:
+      - "If integer patient_id, first map to UUID via metadata."
+      - sql: |
+          SELECT date,
+                 AVG(hr_ppg) FILTER (WHERE hr_ppg BETWEEN 30 AND 120) AS avg_hr,
+                 AVG(sp_o2) FILTER (WHERE sp_o2 BETWEEN 80 AND 100) AS avg_spo2,
+                 AVG(tightnes) AS avg_tightnes,
+                 SUM(CASE WHEN artifact = 1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) AS artifact_rate
+          FROM migrated_data.timeseries
+          WHERE date >= date_format(current_date - interval '{days}' day, '%Y-%m-%d')
+            AND patient = '{patient_uuid}'
+            AND file_type = 'sleep_flow'
+          GROUP BY date
+          ORDER BY date DESC
+
+  using_patient_daily_rollup:    # available after Phase 1F
+    note: |
+      Once `bedrock_agent.patient_daily` is provisioned (Phase 1F), prefer it for ALL cross-cutting
+      questions. It is a per-patient-per-day-per-flow rollup with file_count, total_duration_min,
+      avg_hr, avg_spo2, ecg_quality_pct columns. It scans MB instead of GB.
+    sql_after_1F: |
+      SELECT dt, flow, file_count, avg_hr, avg_spo2
+      FROM bedrock_agent.patient_daily
+      WHERE patient_id = '{integer_id}' AND dt >= current_date - interval '30' day
+      ORDER BY dt DESC
+
+related_skills: [athena_cost_rules, post_computation_skill, signal_columns]

@@ -90,3 +90,27 @@ variable "monthly_budget_usd" {
   type    = number
   default = 200
 }
+
+variable "patient_resolver_url" {
+  type        = string
+  description = "Internal Patients API URL for resolve_patient_uuid."
+  default     = "https://staging.cardiacsense-cloud.com/app/patient/get-patient"
+}
+
+variable "patient_resolver_token_secret_name" {
+  type        = string
+  description = "Secrets Manager secret id/ARN name for bearer token (not the value)."
+  default     = "INTERNAL_TOKEN"
+}
+
+variable "athena_max_scan_gb_default" {
+  type        = number
+  description = "Default max estimated Athena scan size in GB before BLOCKED."
+  default     = 1.0
+}
+
+variable "event_sessions_table" {
+  type        = string
+  description = "Fully qualified Athena table for session/event analytics (if used)."
+  default     = "migrated_data.event_sessions"
+}

@@ -14,11 +14,11 @@ def test_health_returns_ok() -> None:
     # Model is configurable via BEDROCK_MODEL_ID; default is the desired
     # Claude profile, runtime may override (see settings.py for the SCP note).
     assert body["model"]
-    assert body["tools"] >= 6
+    assert body["tools"] >= 25
 
 
 def test_root_lists_tools() -> None:
-    r = client.get("/")
+    r = client.get("/api/info")
     assert r.status_code == 200
     body = r.json()
     assert body["service"] == "bedrock_agent"

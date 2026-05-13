@@ -1,0 +1,65 @@
+description: RT (real-time) flow specifics — ECG + PPG + Cardiolyse algorithms. Has a full post-computation stage. Load whenever the user asks about ECG, AFib, QT, rhythm, HR variability, Cardiolyse output, or "RT flow" / "RT recording".
+version: 1
+
+flow: rt_flow
+
+at_a_glance:
+  rearrangement_prefix: s3://735555370207-app-events/rearrangement/rt_flow/
+  post_comp_prefix: s3://735555370207-app-events/post-computation-layer/rt_flow/
+  has_post_computation: true   # Cardiolyse runs on rt_flow only
+  signals_present: [ppg, ecg, ecg_peak, ecg_afib_episode, hr_ppg, hr_ecg, lead_state, qulity_ecg, sp_o2, acc_x, acc_y, acc_z, ...]
+  cardiolyse_outputs: [crlyse_hr, crlyse_annotation, crlyse_rythem_events, perfusion_index, stroke_volume, ptt, pwv_ecg2ir, pwvc_ecg2ir, ptt_ecg2ir]
+
+heuristics:
+  estimated_chunk_duration_min: 2          # ~2-min RT sessions
+  typical_upload_lag_min: 5
+  listing_safety_multiplier: 2.0
+  recording_pattern: "event-based, ~2-min sessions triggered by user/clinician"
+
+glue_tables:
+  raw_rearrangement: cardiacsense.rt_flow            # 38 typed cols, NO partition
+  watch_metadata: default.rt_flow_metadata           # 15 cols, watch_id + versions
+  enriched_post_comp: cardiacsense.rt_flow_post      # 23 string cols, NO partition (cast on use)
+  preferred_for_analytics: migrated_data.pc_timeseries  # LIVE (≤24h lag); HR / Cardiolyse / sample-level metrics. Partition: date DATE.
+  preferred_for_raw_signal: migrated_data.timeseries    # LIVE; raw PPG/ECG/SpO2/ACC. Partition: date STRING. Filter file_type='rt_flow'.
+  preferred_for_sessions: migrated_data.metadata        # LIVE; no partition; sessions, fe_version, time_init.
+  AVOID:
+    - cardiacsense.rt_flow_rearrangement   # stale all-string view, mostly null
+    - migrated_data.pc_results_part        # FROZEN since 2025-07-07 — DO NOT use as default
+    - migrated_data.processed              # FROZEN since 2025-09-13 — DO NOT use as default
+
+querying:
+  - "DEFAULT FOR HR / Cardiolyse / per-day analytics: migrated_data.pc_timeseries (LIVE). Partition on date (DATE), filter patient and date BETWEEN; aggregate with GROUP BY date. Cardiolyse columns are HYPHENATED — `crlyse-hr`, `crlyse-annotation`, `crlyse-rythem_events` (backticks required)."
+  - "RAW SIGNAL + SpO2: migrated_data.timeseries (LIVE). Partition date STRING. SpO2 is `sp_o2` here (only place SpO2 lives)."
+  - "AVOID pc_results_part — frozen since 2025-07-07 (verified live). For any 'last month / recent' question it returns year-old data. Compute equivalents from pc_timeseries on the fly."
+  - "Only fall back to cardiacsense.rt_flow / rt_flow_post if the question targets a specific session by integer patient_id and the migrated tables don't yet have it."
+
+example_questions:
+  - q: "Did patient 1000 have AFib events last week?"
+    method: |
+      Athena: SELECT date, COUNT(*) AS af_samples
+              FROM migrated_data.pc_timeseries
+              WHERE date BETWEEN current_date - interval '7' day AND current_date
+                AND patient = '<resolved UUID>'
+                AND `crlyse-annotation` IN ('AF', 'AFIB')
+              GROUP BY date ORDER BY date DESC
+  - q: "What was patient 1000's HR trend last 30 days?"
+    method: |
+      Athena pc_timeseries with GROUP BY date AVG(hr_ecg) — partition-filtered.
+      For QT / stress_index / sdnn etc: those live in pc_results_part which
+      is FROZEN. Tell the user the metric is unavailable post-2025-07-07.
+  - q: "Show me the Cardiolyse annotation transitions in patient 1000's session at 2024-12-03 23:30"
+    method: |
+      Athena: SELECT sampling_time, `crlyse-annotation`
+              FROM migrated_data.pc_timeseries
+              WHERE date = DATE '2024-12-03'
+                AND patient = '<UUID>'
+                AND file_type = 'rt_flow'
+                AND sampling_time BETWEEN TIMESTAMP '2024-12-03 23:25:00' AND TIMESTAMP '2024-12-03 23:35:00'
+              ORDER BY sampling_time
+
+cost_warnings:
+  - "cardiacsense.rt_flow / rt_flow_post: NO partition. Single-session queries scan the entire prefix."
+  - "Always prefer migrated tables; fall back to cardiacsense.* only when the data hasn't been migrated yet."
+
+related_skills: [naming_conventions, post_computation_skill, athena_cost_rules, signal_columns]

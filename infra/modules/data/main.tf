@@ -51,6 +51,19 @@ resource "aws_dynamodb_table" "cost" {
   }
 }
 
+# Cache for integer patient_id → pUuid resolution. Populated lazily by the
+# resolve_patient_uuid tool after each successful Patients API call.
+resource "aws_dynamodb_table" "patient_id_map" {
+  name         = "${var.name_prefix}-patient-id-map"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "patient_id"
+
+  attribute {
+    name = "patient_id"
+    type = "N"
+  }
+}
+
 # Agent-owned bucket for downloads, exports, reports, charts.
 resource "aws_s3_bucket" "output" {
   bucket = "${var.name_prefix}-output-${var.account_id}"

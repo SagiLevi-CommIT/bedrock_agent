@@ -1,0 +1,39 @@
+description: Sleep flow specifics — overnight PPG/ACC/artifact recordings, no Cardiolyse, no Glue table at the rearrangement stage. Load whenever the user asks about sleep, overnight, snoring, watch-worn-at-night, or anything sleep-flow specific.
+version: 1
+
+flow: sleep_flow
+
+at_a_glance:
+  prefix: s3://735555370207-app-events/rearrangement/sleep_flow/
+  largest_dataset: yes  # ~627K objects in rearrangement (largest of all flows)
+  has_post_computation: false   # → no Cardiolyse, no rt_flow_post equivalent
+  glue_table_at_rearrangement: NONE
+  signals_present: [ppg, acc_x, acc_y, acc_z, artifact, infra_red, red, ...]
+  signals_absent: [ecg, hr_ecg, ecg_peak, lead_state, qulity_ecg]   # no ECG hardware on this flow
+
+heuristics:
+  estimated_chunk_duration_min: 25         # average per-file recording length
+  typical_upload_lag_min: 25               # how far behind LastModified is from epoch_ms
+  listing_safety_multiplier: 3.0           # widen the time window 3× to catch all files
+  recording_pattern: "continuous chained chunks across a night, ~6-8 hours total"
+
+querying:
+  - "There is NO Glue table for sleep_flow rearrangement. To inspect raw signals, you must download a CSV via merge_patient_window or list_patient_files + presign_s3_object."
+  - "For session-level metrics (HR, SpO2, etc.) sleep_flow data DOES reach migrated_data.timeseries with file_type='sleep_flow' and migrated_data.pc_results_part with file_type='sleep_flow'. Use those for analytics."
+  - "Date partition required on migrated_data tables. file_type filter required to avoid mixing flows."
+
+example_questions:
+  - q: "Did patient 1000 sleep with the watch last night?"
+    method: list_patient_files(patient_id=1000, flow=sleep_flow, time_window=last_24h). Sum file durations from filename epoch_ms (chunk start) + estimated 25-min chunk duration. If total > 30 min, yes.
+  - q: "How much sleep did patient 500 record in April 2026?"
+    method: list_patient_files(patient_id=500, flow=sleep_flow, time_window=April). Group files by night (epoch_ms gap > 4 hours = new night). Report total minutes, nights, and avg per night.
+  - q: "What was patient 1000's heart rate during sleep on 2024-12-17?"
+    method: |
+      First map patient 1000 → UUID via metadata table.
+      Then Athena: SELECT MIN(hr_ppg), MAX(hr_ppg), AVG(hr_ppg) FROM migrated_data.timeseries WHERE date='2024-12-17' AND patient='<UUID>' AND file_type='sleep_flow' AND hr_ppg BETWEEN 30 AND 120.
+
+cost_warnings:
+  - "627K objects: a full LIST of rearrangement/sleep_flow/ is expensive (>10s). Always narrow with patient prefix: rearrangement/sleep_flow/sleep_flow_{patient_id}_."
+  - "When using migrated_data.timeseries, NEVER omit the date partition filter — the table is ~50 GB+ raw."
+
+related_skills: [naming_conventions, rearrangement_skill, athena_cost_rules, patient_lookup_recipes]

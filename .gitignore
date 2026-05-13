@@ -45,6 +45,7 @@ override.tf.json
 node_modules/
 ui/dist/
 ui/.vite/
+*.tsbuildinfo
 
 # Local dev
 .env
@@ -61,3 +62,6 @@ downloads/
 # Plan / scratch
 plan.bin
 *.iml
+
+# Live discovery dumps (raw AWS findings, not committed)
+discovery/

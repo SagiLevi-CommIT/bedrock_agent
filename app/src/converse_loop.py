@@ -14,33 +14,49 @@ import logging
 from typing import Any
 
 from .audit import log_event
+from .session_context import session_id_ctx
 from .settings import get_client, get_settings
 from .tools import call as call_tool
 from .tools import converse_tool_config
 
 logger = logging.getLogger("agent.bedrock")
 
-MAX_ITERS = 10
+MAX_ITERS = 20
 
 
 def _read_system_prompt() -> str:
-    """Read and cache the system prompt from /app/prompts/system_prompt.md."""
-    try:
-        from pathlib import Path
+    """Read the system prompt, trying multiple known locations."""
+    from pathlib import Path
 
-        return Path("/app/prompts/system_prompt.md").read_text(encoding="utf-8")
-    except FileNotFoundError:
-        # local dev fallback
-        from pathlib import Path
-
-        repo_root = Path(__file__).resolve().parents[2]
-        return (repo_root / "prompts" / "system_prompt.md").read_text(encoding="utf-8")
+    candidates = [
+        Path("/app/prompts/system_prompt.md"),
+        Path(__file__).resolve().parents[1] / "prompts" / "system_prompt.md",
+        Path(__file__).resolve().parents[2] / "prompts" / "system_prompt.md",
+        Path.cwd() / "prompts" / "system_prompt.md",
+    ]
+    for p in candidates:
+        try:
+            return p.read_text(encoding="utf-8")
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+    # Diagnostic: dump what's actually present so we can see why all paths failed.
+    diag: list[str] = []
+    for d in [Path("/app"), Path("/app/prompts"), Path.cwd()]:
+        try:
+            diag.append(f"{d}: {sorted(p.name for p in d.iterdir())[:20]}")
+        except Exception as e:
+            diag.append(f"{d}: <{type(e).__name__}: {e}>")
+    raise FileNotFoundError(
+        f"system_prompt.md not found in any of: {[str(p) for p in candidates]}. "
+        f"Diagnostics: {diag}"
+    )
 
 
 def converse(
     messages: list[dict[str, Any]],
     system_prompt: str | None = None,
     request_id: str = "",
+    session_id: str = "",
 ) -> dict[str, Any]:
     """Run the full Bedrock Converse loop until the model stops or hits MAX_ITERS.
 
@@ -49,6 +65,7 @@ def converse(
             already be appended.
         system_prompt: override the on-disk prompt (mainly for tests).
         request_id: opaque trace id for logs.
+        session_id: chat session id for tools that write context (e.g. advice).
 
     Returns:
         dict with: text (final assistant message), messages (updated history),
@@ -60,6 +77,29 @@ def converse(
     sys_text = system_prompt if system_prompt is not None else _read_system_prompt()
     tool_config = converse_tool_config()
 
+    token = session_id_ctx.set(session_id or "")
+    try:
+        return _converse_inner(
+            messages=messages,
+            request_id=request_id,
+            s=s,
+            bedrock=bedrock,
+            sys_text=sys_text,
+            tool_config=tool_config,
+        )
+    finally:
+        session_id_ctx.reset(token)
+
+
+def _converse_inner(
+    *,
+    messages: list[dict[str, Any]],
+    request_id: str,
+    s: Any,
+    bedrock: Any,
+    sys_text: str,
+    tool_config: dict[str, Any],
+) -> dict[str, Any]:
     tool_trace: list[dict[str, Any]] = []
     total_in = 0
     total_out = 0

@@ -70,4 +70,21 @@ def import_all() -> None:
     Importing here keeps the registry assembly explicit; the chat handler
     calls this once at startup.
     """
-    from . import athena, check_aws, glue, s3_explore  # noqa: F401
+    from . import (  # noqa: F401
+        advice,
+        app_events,
+        arrhythmia_codes,
+        athena,
+        check_aws,
+        coverage,
+        estimator,
+        event_search,
+        file_boundary,
+        file_probe,
+        glue,
+        knowledge,
+        patient_resolver,
+        playbooks,
+        s3_explore,
+        s3_links,
+    )

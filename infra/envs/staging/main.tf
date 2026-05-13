@@ -79,6 +79,20 @@ module "data" {
   account_id  = local.account_id
 }
 
+module "indexing" {
+  source                = "../../modules/indexing"
+  name_prefix           = local.name_prefix
+  app_events_bucket     = "735555370207-app-events"
+  rollup_bucket         = module.data.output_bucket_name
+  athena_results_bucket = module.data.athena_results_bucket_name
+  athena_workgroup      = "primary"
+  agent_glue_database   = "bedrock_agent"
+}
+
+data "aws_secretsmanager_secret" "internal_token" {
+  name = var.patient_resolver_token_secret_name
+}
+
 module "iam" {
   source                    = "../../modules/iam"
   name_prefix               = local.name_prefix
@@ -90,8 +104,10 @@ module "iam" {
   dynamodb_table_arns = [
     module.data.sessions_table_arn,
     module.data.cost_table_arn,
+    module.data.patient_id_map_table_arn,
   ]
-  secret_arns = []
+  secret_arns      = []
+  task_secret_arns = [data.aws_secretsmanager_secret.internal_token.arn]
 }
 
 module "alb" {
@@ -149,6 +165,15 @@ module "ecs" {
     OUTPUT_BUCKET           = module.data.output_bucket_name
     LOG_LEVEL               = "INFO"
     ALLOW_WRITES            = "false"
+    GET_PATIENT_URL            = var.patient_resolver_url
+    PATIENT_RESOLVER_URL       = var.patient_resolver_url
+    INTERNAL_TOKEN_SECRET_NAME = var.patient_resolver_token_secret_name
+    PATIENT_RESOLVER_TOKEN_SECRET_NAME = var.patient_resolver_token_secret_name
+    PATIENT_ID_MAP_TABLE       = module.data.patient_id_map_table_name
+    PATIENT_ID_UUID_MAP_TABLE  = module.data.patient_id_map_table_name
+    EVENTS_BUCKET              = "735555370207-app-events"
+    EVENT_SESSIONS_TABLE       = var.event_sessions_table
+    ATHENA_MAX_SCAN_GB_DEFAULT = tostring(var.athena_max_scan_gb_default)
   }
 }
 

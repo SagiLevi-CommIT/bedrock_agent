@@ -60,6 +60,21 @@ resource "aws_iam_role" "task" {
   })
 }
 
+resource "aws_iam_role_policy" "task_secrets_read" {
+  count = length(var.task_secret_arns) > 0 ? 1 : 0
+  name  = "${var.name_prefix}-task-secrets-read"
+  role  = aws_iam_role.task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"]
+      Resource = var.task_secret_arns
+    }]
+  })
+}
+
 resource "aws_iam_role_policy" "task_bedrock" {
   name = "${var.name_prefix}-task-bedrock"
   role = aws_iam_role.task.id
@@ -116,6 +131,8 @@ resource "aws_iam_role_policy" "task_glue_readonly" {
         "glue:GetTables",
         "glue:GetPartition",
         "glue:GetPartitions",
+        "glue:GetPartitionStatistics",
+        "glue:BatchGetPartition",
         "glue:SearchTables",
       ]
       Resource = "*"

@@ -1,0 +1,601 @@
+{
+  "_meta": {
+    "generated_at": "2026-03-30T00:00:00Z",
+    "source": "recovered from interrupted session log_session.txt + existing knowledge files",
+    "last_refreshed": "2026-03-30T00:00:00Z",
+    "description": "Physical S3 catalog — maps buckets and prefixes to content, file patterns, and object counts. This is the 'what exists where' view."
+  },
+  "buckets": {
+    "735555370207-app-events": {
+      "role": "Raw pipeline data — incoming uploads, rearranged flows, post-computation enrichments, processed events, errors",
+      "region": "eu-central-1",
+      "prefixes": {
+        "incoming/": {
+          "description": "Raw watch uploads as zipped binary archives",
+          "object_count": null,
+          "file_patterns": ["{flow}_{patient_id}_{epoch_ms}.dat.zip"],
+          "format": "BINARY ZIP",
+          "notes": "Verified live 2026-05-02: prefix now holds .dat.zip archives (e.g. incoming/sleep_flow_110_1775241259384.dat.zip), NOT cs_events_*.csv. The cs_events_*.csv format was retired from this prefix; those files now live only under processed/. Most watch uploads pass through quickly to incoming_dat_files/, dat_zip/, or rearrangement/.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "doctor-realtime-session/": {
+          "description": "Clinical doctor↔patient real-time session JSONs (added to catalog 2026-05-02)",
+          "object_count": 174,
+          "file_patterns": [
+            "realtime-doctorId-{doctor_id}-pId-{patient_id}-{epoch_ms}.json",
+            "realtime-docId-{doctor_id}-pId-{patient_id}-{epoch_ms}.json",
+            "{doctor_id}-{patient_id}-realtime.json"
+          ],
+          "format": "JSON",
+          "glue_tables": [],
+          "notes": "Doctor-supervised session payloads. Three filename variants observed. Useful for clinical-context queries.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "interesting_files/": {
+          "description": "Curated/flagged-of-interest files (uninspected as of 2026-05-02)",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "unknown",
+          "notes": "Out-of-scope for the agent; document and skip unless the user asks.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "misc/": {
+          "description": "Miscellaneous bucket — uninspected (added 2026-05-02)",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "unknown",
+          "notes": "Out-of-scope for the agent.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "tmp/": {
+          "description": "Temporary working files — uninspected (added 2026-05-02)",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "unknown",
+          "notes": "Treat as ephemeral; do not query.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "rt-sessions-pdf/": {
+          "description": "PDF reports for real-time sessions (added 2026-05-02)",
+          "object_count": null,
+          "file_patterns": ["*.pdf"],
+          "format": "PDF",
+          "notes": "Companion to rt-sessions/. Not queryable via Athena.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "incoming_plate_dat_files/": {
+          "description": "Plate-device binary uploads (added 2026-05-02)",
+          "object_count": null,
+          "file_patterns": ["*.dat"],
+          "format": "BINARY",
+          "notes": "Plate-flow specific raw binary path.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "rearrangement/": {
+          "description": "Reorganized flow data grouped by recording type",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "mixed",
+          "notes": "Container prefix — actual data is in sub-prefixes by flow type",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "rearrangement/rt_flow/",
+            "rearrangement/sleep_flow/",
+            "rearrangement/ar_flow/",
+            "rearrangement/af_ppg_flow/",
+            "rearrangement/algos_flow/",
+            "rearrangement/arrythmia_flow/",
+            "rearrangement/plate_flow/",
+            "rearrangement/tachycardia_flow/"
+          ]
+        },
+        "rearrangement/rt_flow/": {
+          "description": "Real-time flow rearranged data with metadata and session files",
+          "object_count": 19470,
+          "file_patterns": [
+            "rt_flow_{patient_id}_{epoch_ms}.csv",
+            "rt_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "rt_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": ["cardiacsense.rt_flow", "cardiacsense.rt_flow_rearrangement", "default.rt_flow_metadata"],
+          "notes": "Flat prefix, no date partitioning. Patient IDs are integers. Timestamps are epoch milliseconds.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/sleep_flow/": {
+          "description": "Sleep monitoring flow rearranged data",
+          "object_count": 627297,
+          "file_patterns": [
+            "sleep_flow_{patient_id}_{epoch_ms}.csv",
+            "sleep_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "sleep_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Largest rearrangement sub-prefix by object count. No dedicated Glue table — data reaches migrated_data.timeseries via file_type='sleep_flow'.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/ar_flow/": {
+          "description": "Arrhythmia flow rearranged data",
+          "object_count": 2139,
+          "file_patterns": [
+            "ar_flow_{patient_id}_{epoch_ms}.csv",
+            "ar_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "ar_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Reaches migrated_data.timeseries via file_type='ar_flow'.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/af_ppg_flow/": {
+          "description": "AF PPG flow rearranged data",
+          "object_count": 810,
+          "file_patterns": [
+            "af_ppg_flow_{patient_id}_{epoch_ms}.csv",
+            "af_ppg_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "af_ppg_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Small dataset for AF detection via PPG.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/algos_flow/": {
+          "description": "Algorithm-specific flow data",
+          "object_count": 3,
+          "file_patterns": [
+            "algos_flow_{patient_id}_{epoch_ms}.csv",
+            "algos_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "algos_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Minimal data — only 1 patient (46) with 1 recording.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/arrythmia_flow/": {
+          "description": "Arrhythmia flow (note: 'arrythmia' is the actual spelling in S3)",
+          "object_count": null,
+          "file_patterns": [
+            "arrythmia_flow_{patient_id}_{epoch_ms}.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "arrythmia_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Object count not captured in recovery session.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "rearrangement/plate_flow/": {
+          "description": "Plate flow rearranged data (ECG plate device)",
+          "object_count": 1105,
+          "file_patterns": [
+            "plate_flow_{patient_id}_{epoch_ms}.csv",
+            "plate_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "plate_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Plate-specific device recordings.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rearrangement/tachycardia_flow/": {
+          "description": "Tachycardia flow rearranged data",
+          "object_count": 426,
+          "file_patterns": [
+            "tachycardia_flow_{patient_id}_{epoch_ms}.csv",
+            "tachycardia_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "tachycardia_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "glue_tables": [],
+          "notes": "Tachycardia detection recordings.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "post-computation-layer/": {
+          "description": "Enriched data after computation algorithms run",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "mixed",
+          "notes": "Container prefix — actual data is in sub-prefixes by flow type",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "post-computation-layer/rt_flow/",
+            "post-computation-layer/arrythmia_flow/",
+            "post-computation-layer/plate_flow/"
+          ]
+        },
+        "post-computation-layer/rt_flow/": {
+          "description": "Post-computation enriched rt_flow with derived metrics",
+          "object_count": 18294,
+          "file_patterns": [
+            "rt_flow_{patient_id}_{epoch_ms}.csv",
+            "rt_flow_{patient_id}_{epoch_ms}.json",
+            "rt_flow_{patient_id}_{epoch_ms}-avg-values.csv"
+          ],
+          "format": "CSV + JSON",
+          "glue_tables": ["cardiacsense.rt_flow_post"],
+          "notes": "Three artifacts per recording: raw enriched CSV, JSON summary, and averaged values CSV. Adds perfusion_index, stroke_volume, ptt, pwv, carsiolyse.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "post-computation-layer/arrythmia_flow/": {
+          "description": "Post-computation enriched arrythmia_flow",
+          "object_count": 3,
+          "file_patterns": [
+            "arrythmia_flow_{patient_id}_{epoch_ms}-avg-values.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}.json"
+          ],
+          "format": "CSV + JSON",
+          "glue_tables": [],
+          "notes": "Only 1 patient (431) with 1 recording.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "post-computation-layer/plate_flow/": {
+          "description": "Post-computation enriched plate_flow",
+          "object_count": null,
+          "file_patterns": [
+            "plate_flow_{patient_id}_{epoch_ms}-avg-values.csv",
+            "plate_flow_{patient_id}_{epoch_ms}.csv",
+            "plate_flow_{patient_id}_{epoch_ms}.json"
+          ],
+          "format": "CSV + JSON",
+          "glue_tables": [],
+          "notes": "Object count not captured in recovery session.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "processed/": {
+          "description": "Extracted clinical events (same format as incoming)",
+          "object_count": 550024,
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "glue_tables": ["eventdata.events", "eventdata.events_test"],
+          "notes": "WARNING: Glue registers this as Parquet but actual files are CSV. Queries fail with HIVE_BAD_DATA: Malformed Parquet file. Must fix catalog or data format.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "error_events/": {
+          "description": "Failed processing events",
+          "object_count": 321352,
+          "file_patterns": ["cs_errorevents_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "glue_tables": [],
+          "notes": "Error logs from pipeline failures. Not queryable via Athena.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "errors/": {
+          "description": "Processing errors (secondary error path)",
+          "object_count": 7070,
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "glue_tables": [],
+          "notes": "Some files have double extensions like .csv.csv. Smaller than error_events/.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "rt-sessions/": {
+          "description": "Real-time session summary JSON files",
+          "object_count": 13010,
+          "file_patterns": ["cs_realtime_{patient_id}_{datetime_YYYYMMDDHHmmss}.json"],
+          "format": "JSON",
+          "glue_tables": [],
+          "notes": "Also contains a pdf/ sub-prefix for generated reports.",
+          "needs_refresh": false,
+          "sub_prefixes": ["rt-sessions/pdf/"]
+        },
+        "dat_zip/": {
+          "description": "Compressed DAT file archives grouped by flow type",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "DAT (binary)",
+          "notes": "Container prefix for binary data archives.",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "dat_zip/af_ppg_flow/",
+            "dat_zip/ar_flow/",
+            "dat_zip/rt_flow/",
+            "dat_zip/sleep_flow/",
+            "dat_zip/tachycardia_flow/"
+          ]
+        },
+        "incoming_dat_files/": {
+          "description": "Incoming binary DAT files grouped by flow type",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "DAT (binary)",
+          "notes": "Raw binary sensor data before CSV conversion.",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "incoming_dat_files/af_ppg_flow/",
+            "incoming_dat_files/ar_flow/",
+            "incoming_dat_files/arrythmia_flow/",
+            "incoming_dat_files/rt_flow/",
+            "incoming_dat_files/sleep_flow/",
+            "incoming_dat_files/tachycardia_flow/"
+          ]
+        },
+        "incoming_dat_processed/": {
+          "description": "Processed DAT files grouped by flow type",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "DAT (binary)",
+          "notes": "DAT files after initial processing.",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "incoming_dat_processed/af_ppg_flow/",
+            "incoming_dat_processed/algos_flow/",
+            "incoming_dat_processed/ar_flow/",
+            "incoming_dat_processed/arrythmia_flow/",
+            "incoming_dat_processed/plate_flow/",
+            "incoming_dat_processed/rt_flow/",
+            "incoming_dat_processed/sleep_flow/",
+            "incoming_dat_processed/tachycardia_flow/"
+          ]
+        },
+        "incoming_plate_dat_files/": {
+          "description": "Incoming DAT files for plate device",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "DAT (binary)",
+          "notes": "Sub-flows not fully listed in recovery session.",
+          "needs_refresh": true,
+          "sub_prefixes": [
+            "incoming_plate_dat_files/algos_flow/",
+            "incoming_plate_dat_files/plate_flow/"
+          ]
+        },
+        "inprocess/": {
+          "description": "Events currently being processed (in-flight)",
+          "object_count": 62,
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "glue_tables": [],
+          "notes": "Transient state — files here are mid-pipeline. Small count suggests most complete quickly.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "general_dat_files/": {
+          "description": "General-purpose DAT binary files",
+          "object_count": 531,
+          "file_patterns": ["rt_flow_{patient_id}_{epoch_ms}.dat"],
+          "format": "DAT (binary)",
+          "glue_tables": [],
+          "notes": "Only patient 605 observed. Sequentially numbered epoch suffixes.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "algorithms_outputs/": {
+          "description": "Algorithm processing output reports",
+          "object_count": 1,
+          "file_patterns": ["CardiacSense_Report_{patient_id}_{epoch_ms}_embedded.html"],
+          "format": "HTML",
+          "glue_tables": [],
+          "notes": "Single embedded HTML report found.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "interesting_files/": {
+          "description": "Manually flagged interesting session files",
+          "object_count": 2,
+          "file_patterns": ["cs_realtime_{patient_id}_{datetime}.json"],
+          "format": "JSON",
+          "glue_tables": [],
+          "notes": "Only 2 files from patient 294. Likely manually curated for analysis.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "misc/": {
+          "description": "Miscellaneous files",
+          "object_count": 0,
+          "file_patterns": [],
+          "format": "unknown",
+          "glue_tables": [],
+          "notes": "Empty prefix.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "doctor-realtime-session/": {
+          "description": "Doctor real-time session data",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "unknown",
+          "glue_tables": [],
+          "notes": "Not explored in recovery session.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        }
+      }
+    },
+    "735555370207-migrated--data": {
+      "role": "Production-grade Parquet/CSV tables — preferred query targets",
+      "region": "eu-central-1",
+      "prefixes": {
+        "time-series-data/": {
+          "description": "Full raw timeseries data (PPG, ECG, SpO2, accelerometer, etc.)",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/",
+          "partition_count": 969,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2026-03-25"},
+          "file_patterns": ["{flow_type}_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "glue_tables": ["migrated_data.timeseries"],
+          "notes": "Date partitions include bogus 2000-01-0x entries (malformed timestamps). Flow types in filenames: rt_flow, sleep_flow, ar_flow. Patient ID is UUID at this stage (not integer).",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "pc-results/": {
+          "description": "Aggregated per-session computation results (HR, HRV, SpO2, AF, etc.)",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/",
+          "partition_count": 865,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2025-07-07"},
+          "file_patterns": ["{flow_type}_{epoch_ms}-avg-values.csv"],
+          "format": "CSV",
+          "glue_tables": ["migrated_data.pc_results_part", "migrated_data.pc_results"],
+          "notes": "pc_results_part is date-partitioned (DATE type), pc_results is the unpartitioned view of same data. ALWAYS use pc_results_part.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "pc-timeseries/": {
+          "description": "Post-computation enriched timeseries with derived metrics",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/",
+          "partition_count": 865,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2026-03-25"},
+          "file_patterns": ["{flow_type}_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "glue_tables": ["migrated_data.pc_timeseries"],
+          "notes": "Includes Carsiolyse-derived columns with hyphenated names (crlyse-hr, crlyse-annotation, etc.).",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "meta-data/": {
+          "description": "Session metadata (watch info, versions, quality indicators, timing)",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/",
+          "partition_count": 966,
+          "partition_range": {"earliest": "2000-08-20", "latest": "2026-03-25"},
+          "file_patterns": [],
+          "format": "CSV",
+          "glue_tables": ["migrated_data.metadata"],
+          "notes": "WARNING: metadata table has NO partition in Glue despite date-organized S3 layout. Every query is a FULL SCAN (~70 columns, 215K+ rows). Use sparingly.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "meta-data-parquet/": {
+          "description": "Parquet version of metadata (not mapped to Glue)",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/",
+          "partition_count": 457,
+          "partition_range": {"earliest": "2023-04-04", "latest": null},
+          "file_patterns": [],
+          "format": "Parquet",
+          "glue_tables": [],
+          "notes": "Undocumented in Glue catalog. Potential optimization target — if mapped, would enable partitioned Parquet metadata queries instead of full CSV scans.",
+          "needs_refresh": true,
+          "sub_prefixes": []
+        },
+        "processed-data/": {
+          "description": "Processed ECG segments with quality scores",
+          "object_count": null,
+          "partition_scheme": "date=YYYY-MM-DD/patient=UUID/",
+          "partition_count": 51,
+          "partition_range": {"earliest": "2025-04-01", "latest": null},
+          "file_patterns": [],
+          "format": "Parquet",
+          "glue_tables": ["migrated_data.processed", "migrated_data.processed1"],
+          "notes": "Double-partitioned by date AND patient UUID. Relatively new data (starts April 2025). processed1 adds filtered_ecg and bp_filterred_ecg columns.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "pipeline-monitor/": {
+          "description": "Pipeline health monitoring CSV files",
+          "object_count": 226511,
+          "partition_scheme": null,
+          "file_patterns": [
+            "{flow_type}_{patient_id}.monitor.csv",
+            "{flow_type}{epoch_ms}.monitor.csv"
+          ],
+          "format": "CSV",
+          "glue_tables": [],
+          "notes": "Flat prefix, no partitioning. Monitoring files for af_ppg, rt_flow, sleep_flow, ar_flow, tachycardia, plate. Not queryable via Athena.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "query-results/": {
+          "description": "Athena query output and temporary tables",
+          "object_count": null,
+          "partition_scheme": null,
+          "file_patterns": [],
+          "format": "CSV (Athena output)",
+          "glue_tables": [],
+          "notes": "Athena workgroup output location. Contains Unsaved/, exports/, tables/, and many temp_table_* prefixes. Not user data.",
+          "needs_refresh": false,
+          "sub_prefixes": ["query-results/Unsaved/", "query-results/exports/", "query-results/tables/"]
+        },
+        "debug-local/": {
+          "description": "Local debug output directories",
+          "object_count": null,
+          "partition_scheme": null,
+          "file_patterns": ["{YYYYMMDD}_{HHMMSS}_{hash}/"],
+          "format": "unknown",
+          "glue_tables": [],
+          "notes": "2 timestamped debug directories from December 2025.",
+          "needs_refresh": false,
+          "sub_prefixes": [
+            "debug-local/20251223_153206_37eaf94b/",
+            "debug-local/20251223_160357_7333d40d/"
+          ]
+        }
+      }
+    },
+    "735555370207-datasets-versioning": {
+      "role": "Curated ML datasets, labeled data, and SageMaker training artifacts",
+      "region": "eu-central-1",
+      "prefixes": {
+        "session=*/": {
+          "description": "Curated labeled data partitioned by session UUID",
+          "object_count": null,
+          "partition_scheme": "session=UUID/",
+          "partition_count": 54,
+          "file_patterns": ["part-NNNNN-{uuid}.c000.snappy.parquet"],
+          "format": "Snappy Parquet (Spark output)",
+          "glue_tables": ["migrated_data.curated"],
+          "notes": "Spark-generated partitioned Parquet. Each session has 1 part file. Used for ML training.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "labeled_data/": {
+          "description": "Labeled dataset CSV",
+          "object_count": 1,
+          "file_patterns": ["dataset.csv"],
+          "format": "CSV",
+          "glue_tables": [],
+          "notes": "Single CSV file with labeled data.",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        },
+        "sagemaker-artifacts/": {
+          "description": "SageMaker model artifacts",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "mixed",
+          "glue_tables": [],
+          "notes": "Contains sklearn-logreg/ sub-prefix. ML model artifacts from SageMaker training jobs.",
+          "needs_refresh": false,
+          "sub_prefixes": ["sagemaker-artifacts/sklearn-logreg/"]
+        },
+        "sagemaker-scikit-learn-*/": {
+          "description": "SageMaker scikit-learn training job outputs",
+          "object_count": null,
+          "file_patterns": [],
+          "format": "mixed",
+          "glue_tables": [],
+          "notes": "Multiple training runs from August-September 2025. Pattern: sagemaker-scikit-learn-YYYY-MM-DD-HH-MM-SS-NNN/",
+          "needs_refresh": false,
+          "sub_prefixes": []
+        }
+      }
+    }
+  }
+}

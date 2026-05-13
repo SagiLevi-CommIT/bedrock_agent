@@ -27,6 +27,7 @@ COPY app/pyproject.toml ./
 COPY app/src ./src
 COPY prompts ./prompts
 COPY knowledge ./knowledge
+COPY skills ./skills
 COPY --from=uibuild /ui/dist ./ui_dist
 
 RUN pip install --upgrade pip wheel && \

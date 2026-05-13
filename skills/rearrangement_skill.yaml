@@ -1,0 +1,45 @@
+description: How to query and reason about REARRENGEMENT-stage data (raw rearranged signals before Cardiolyse). Load when the user asks about raw signal data, file existence, or per-session content for any of the 8 flows.
+version: 1
+
+stage: rearrangement
+prefix: s3://735555370207-app-events/rearrangement/{flow}/
+file_pattern: "{flow}_{patient_id}_{epoch_ms}.csv (+ _metadata.txt + _session.tmp)"
+id_type: integer (bare digits in filename)
+timestamp_type: epoch_milliseconds (13 digits in filename)
+
+flows_present_at_this_stage:
+  - rt_flow         # ECG + PPG + ACC, ~2-min sessions, ~5-min upload lag
+  - sleep_flow      # PPG/ACC/artifact only, ~25-min chunks, ~25-min upload lag
+  - ar_flow         # arrhythmia, triggered
+  - af_ppg_flow     # AF detection via PPG, triggered, small dataset
+  - arrythmia_flow  # distinct from ar_flow (note: 'arrythmia' is the actual S3 spelling)
+  - algos_flow      # experimental, tiny
+  - plate_flow      # plate device, continuous
+  - tachycardia_flow  # triggered
+
+glue_tables:
+  rt_flow:
+    primary: cardiacsense.rt_flow         # 38 cols, LazySimpleSerDe, typed (bigint/double/string), date is a regular column NOT a partition
+    metadata: default.rt_flow_metadata     # 15 cols, watch_id (only place this column lives), time_init/time_end as strings
+    avoid: cardiacsense.rt_flow_rearrangement   # stale all-string view of same prefix; columns mismatch the actual files; queries return mostly null
+  other_flows:
+    glue_table: NONE        # sleep_flow, ar_flow, af_ppg_flow, arrythmia_flow, algos_flow, plate_flow, tachycardia_flow have no Glue table at this stage. Use S3 tools, not Athena.
+
+decision_tree:
+  - condition: User wants to enumerate files (existence, count, durations, "last upload")
+    do: Use S3 tools (list_patient_files, find_patient_last_upload, patient_usage_summary) — DO NOT use Athena. The answer is in the S3 keys.
+  - condition: User wants raw signal columns from rt_flow specifically
+    do: Athena cardiacsense.rt_flow. Use a tight WHERE on patient_id + sampling_time range. Note this is a NO-PARTITION table — every query is a full scan over the prefix. Prefer migrated_data.timeseries for the same data with date partitioning where possible.
+  - condition: User wants raw signal columns from sleep_flow / other flows
+    do: Either query migrated_data.timeseries WHERE file_type='<flow>' AND date='<YYYY-MM-DD>' (preferred, partitioned), OR download a specific file via merge_patient_window.
+
+cost_warnings:
+  - "cardiacsense.rt_flow: NO partition; full S3 LIST + read of rearrangement/rt_flow/ on every query."
+  - "migrated_data.timeseries: partitioned on date (string). Always include WHERE date='YYYY-MM-DD' AND file_type='<flow>'."
+  - "For sleep_flow specifically — there is no Glue table at this stage. Use S3."
+
+actual_signal_time_vs_upload_time:
+  rule: "S3 LastModified is the upload time, which can lag the actual recording time by 5 minutes (rt_flow) up to several hours (sleep_flow during outages). To get the recording start, parse epoch_ms from the filename. To get the recording end, probe the last sampling_time row of the CSV."
+  tool: probe_file_time_range
+
+related_skills: [naming_conventions, athena_cost_rules, sleep_skill, rt_skill]

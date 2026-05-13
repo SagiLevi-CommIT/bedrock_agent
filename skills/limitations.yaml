@@ -1,0 +1,90 @@
+description: Catalog of questions the agent CANNOT answer and prewritten user-facing refusals. Load whenever the user's request seems out-of-scope, ambiguous, or impossible with current data.
+version: 1
+
+refusals:
+
+  predict_future_events:
+    triggers: ["will X happen", "predict", "forecast", "next week"]
+    answerable: false
+    reason: "We have no predictive ML model deployed. The agent reports historical data only."
+    user_response: |
+      I can't predict future events. I can show you historical patterns —
+      e.g., the patient's heart rate trend over the last 30 days, or how
+      frequently AFib annotations occurred in their previous sessions —
+      which a clinician can use to make a judgment. Want one of those
+      instead?
+
+  integer_to_uuid_join:
+    triggers: ["integer patient_id and UUID together", "join rearrangement to migrated"]
+    answerable: partial
+    reason: "There is no canonical mapping table between the integer patient_id used in S3 filenames / eventdata / rearrangement and the UUID used in migrated_data.* tables."
+    user_response: |
+      The watch data uses integer patient IDs (e.g. 1000) while the
+      migrated/processed tables use UUIDs (e.g. 40f2e337-...). There is no
+      direct join. Workarounds:
+      1. Look up the patient's recent session in migrated_data.metadata
+         filtered by time range — the UUID lives in the `patient` column.
+      2. If you can give me the patient's UUID directly, I can query the
+         migrated tables straight away.
+
+  eventdata_events_query:
+    triggers: ["query eventdata.events", "SELECT * FROM eventdata.events"]
+    answerable: false
+    reason: "eventdata.events / events_test are declared as Parquet in Glue but the actual S3 files are CSV. Athena fails with HIVE_BAD_DATA on every query."
+    user_response: |
+      The `eventdata.events` table is broken in the Glue catalog — it claims
+      Parquet format but the S3 files are CSV. Queries fail with
+      HIVE_BAD_DATA. To get the same data I'd have to read the raw CSVs in
+      `s3://735555370207-app-events/processed/` directly. Want me to do that
+      with explicit prefix filters?
+
+  long_merge_window:
+    triggers: ["merge a year", "merge whole month of sleep", "all data ever"]
+    answerable: false
+    reason: "merge_patient_window has a wall-clock budget per tool call. Output > ~100 MB is rejected to keep the chat usable."
+    user_response: |
+      That window is too large for a single merge — the result would exceed
+      ~100 MB and would time out. Please narrow to a shorter window (a few
+      hours for sleep, or up to a day for RT). For larger exports, spawn a
+      dedicated S3 batch download.
+
+  cross_account_or_prod_data:
+    triggers: ["production data", "prod account", "real patients", "live", "PHI"]
+    answerable: false
+    reason: "Hard CLAUDE.md constraint: agent operates only against the staging account 735555370207. No production data."
+    user_response: |
+      I can only access the staging AWS account (735555370207). I can't
+      query the production environment from this chat. Anything you ask
+      will be answered against staging snapshot data.
+
+  write_or_modify:
+    triggers: ["delete", "insert", "update", "create table", "modify"]
+    answerable: false
+    reason: "Read-only enforcement. The Athena tool blocks DDL/DML. The IAM task role lacks write permissions on data buckets."
+    user_response: |
+      I'm read-only by design. I can't INSERT/UPDATE/DELETE or create
+      tables. The IAM role and the Athena tool both block writes. If you
+      need a write, ask the data engineering team or open a PR against
+      `infra/`.
+
+  pii_lookup:
+    triggers: ["patient name", "phone number", "email", "address", "real identity"]
+    answerable: false
+    reason: "PII is not stored in the staging tables we can access; even if it were, we wouldn't expose it."
+    user_response: |
+      I don't have access to patient PII (name, contact info). I can work
+      with patient_id (integer) or patient UUID for analytical queries,
+      but I won't link those to real-world identities.
+
+  specific_session_signal_at_time_without_uuid:
+    triggers: ["HR at <time>", "ECG at"]
+    answerable: needs_clarification
+    reason: "Per-sample queries against timeseries / pc_timeseries require a UUID + an exact date partition. Integer patient_id requires a mapping step."
+    user_response_template: |
+      To pull the signal value at {datetime}, I need either:
+      - the patient's UUID, OR
+      - permission to scan migrated_data.metadata to map integer {patient_id}
+        → UUID (this is a full scan, ~215K rows).
+      Which do you prefer?
+
+related_skills: [athena_cost_rules]

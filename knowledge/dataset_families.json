@@ -1,0 +1,438 @@
+{
+  "_meta": {
+    "generated_at": "2026-03-30T00:00:00Z",
+    "description": "Dataset families with stage-specific artifacts. This is the 'how data flows through the pipeline' view. Each family represents a recording type that appears at multiple pipeline stages with different schemas, formats, and locations.",
+    "last_refreshed": "2026-03-30T00:00:00Z"
+  },
+  "families": {
+    "rt_flow": {
+      "description": "Real-time physiological flow — continuous PPG, ECG, SpO2, accelerometer, HR, respiration recording",
+      "recording_type": "continuous",
+      "stages": {
+        "incoming": {
+          "bucket": "735555370207-app-events",
+          "prefix": "incoming/",
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_seconds",
+          "glue_tables": [],
+          "notes": "Raw watch uploads — event-level CSV. Shared prefix with all flow types."
+        },
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/rt_flow/",
+          "file_patterns": [
+            "rt_flow_{patient_id}_{epoch_ms}.csv",
+            "rt_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "rt_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 19470,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": ["cardiacsense.rt_flow", "cardiacsense.rt_flow_rearrangement", "default.rt_flow_metadata"],
+          "schema_notes": {
+            "cardiacsense.rt_flow": "38 columns, LazySimpleSerDe, typed (bigint/double/string). date column is NOT a partition.",
+            "cardiacsense.rt_flow_rearrangement": "Same location, OpenCSVSerde — all columns are string type.",
+            "default.rt_flow_metadata": "Session metadata: watch_id, hardware_version, be_version, fe_version, patient_yob, time_init, time_end, record_length."
+          },
+          "notes": "Reorganized by flow type. 3 artifacts per recording (data CSV, metadata TXT, session TMP). Patient IDs are integers."
+        },
+        "post_computation": {
+          "bucket": "735555370207-app-events",
+          "prefix": "post-computation-layer/rt_flow/",
+          "file_patterns": [
+            "rt_flow_{patient_id}_{epoch_ms}.csv",
+            "rt_flow_{patient_id}_{epoch_ms}.json",
+            "rt_flow_{patient_id}_{epoch_ms}-avg-values.csv"
+          ],
+          "format": "CSV + JSON",
+          "object_count": 18294,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": ["cardiacsense.rt_flow_post"],
+          "derived_metrics": ["perfusion_index", "stroke_volume", "ptt", "pwv_ecg2ir", "crlyse_hr", "crlyse_annotation", "crlyse_rythem_events"],
+          "schema_notes": {
+            "cardiacsense.rt_flow_post": "23 columns, OpenCSVSerde, all string. Adds Cardiolyse-derived vitals (crlyse_hr, crlyse_annotation, crlyse_rythem_events). Verified live 2026-05-02."
+          },
+          "notes": "3 artifacts per recording: enriched CSV, JSON summary, averaged values CSV. Adds derived cardiac metrics."
+        },
+        "migrated_timeseries": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "time-series-data/",
+          "file_patterns": ["rt_flow_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "string",
+          "partition_count": 969,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2026-03-25"},
+          "id_type": "UUID",
+          "timestamp_type": "timestamp",
+          "glue_tables": ["migrated_data.timeseries"],
+          "notes": "Production Parquet, date-partitioned. PREFERRED for timeseries queries. Patient ID converts from integer to UUID at this stage. Filter by file_type='rt_flow'."
+        },
+        "migrated_pc_timeseries": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "pc-timeseries/",
+          "file_patterns": ["rt_flow_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "DATE",
+          "partition_count": 865,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2026-03-25"},
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.pc_timeseries"],
+          "notes": "Post-computation enriched timeseries in Parquet. Includes Carsiolyse columns with hyphenated names."
+        },
+        "migrated_results": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "pc-results/",
+          "file_patterns": ["rt_flow_{epoch_ms}-avg-values.csv"],
+          "format": "CSV",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "DATE",
+          "partition_count": 865,
+          "partition_range": {"earliest": "2000-01-01", "latest": "2025-07-07"},
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.pc_results_part", "migrated_data.pc_results"],
+          "notes": "Aggregated session-level results. ALWAYS use pc_results_part (partitioned) not pc_results."
+        },
+        "processed_events": {
+          "bucket": "735555370207-app-events",
+          "prefix": "processed/",
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "object_count": 550024,
+          "partitioned": false,
+          "id_type": "integer",
+          "glue_tables": ["eventdata.events", "eventdata.events_test"],
+          "notes": "WARNING: Glue catalog declares Parquet format but actual files are CSV. Queries fail with HIVE_BAD_DATA."
+        }
+      },
+      "preferred_query_table": "migrated_data.pc_results_part",
+      "preferred_timeseries_table": "migrated_data.timeseries",
+      "id_transition": "Patient ID changes from integer (rearrangement/post-computation) to UUID (migrated_data). No direct join between stages."
+    },
+    "sleep_flow": {
+      "description": "Sleep monitoring flow — overnight recording sessions with PPG, SpO2, accelerometer",
+      "recording_type": "overnight",
+      "stages": {
+        "incoming": {
+          "bucket": "735555370207-app-events",
+          "prefix": "incoming/",
+          "file_patterns": ["cs_events_{patient_id}_{epoch_sec}.csv"],
+          "format": "CSV",
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_seconds",
+          "glue_tables": [],
+          "notes": "Shared incoming prefix with all flow types."
+        },
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/sleep_flow/",
+          "file_patterns": [
+            "sleep_flow_{patient_id}_{epoch_ms}.csv",
+            "sleep_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "sleep_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 627297,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "Largest rearrangement dataset by object count. No dedicated Glue table."
+        },
+        "migrated_timeseries": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "time-series-data/",
+          "file_patterns": ["sleep_flow_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "string",
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.timeseries"],
+          "notes": "Reaches migrated_data.timeseries with file_type='sleep_flow'. Filter required."
+        },
+        "migrated_results": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "pc-results/",
+          "file_patterns": ["sleep_flow_{epoch_ms}-avg-values.csv"],
+          "format": "CSV",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "DATE",
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.pc_results_part"],
+          "notes": "Session-level sleep results. Filter by file_type='sleep_flow'."
+        }
+      },
+      "preferred_query_table": "migrated_data.pc_results_part",
+      "preferred_timeseries_table": "migrated_data.timeseries",
+      "query_filter": "file_type = 'sleep_flow'",
+      "id_transition": "Patient ID changes from integer to UUID at migrated stage."
+    },
+    "ar_flow": {
+      "description": "Arrhythmia detection flow — targeted recording for arrhythmia analysis",
+      "recording_type": "triggered",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/ar_flow/",
+          "file_patterns": [
+            "ar_flow_{patient_id}_{epoch_ms}.csv",
+            "ar_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "ar_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 2139,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "No dedicated post-computation stage observed."
+        },
+        "migrated_timeseries": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "time-series-data/",
+          "file_patterns": ["ar_flow_{epoch_ms}.parquet"],
+          "format": "Parquet",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "string",
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.timeseries"],
+          "notes": "Reaches migrated_data.timeseries with file_type='ar_flow'."
+        },
+        "migrated_results": {
+          "bucket": "735555370207-migrated--data",
+          "prefix": "pc-results/",
+          "file_patterns": ["ar_flow_{epoch_ms}-avg-values.csv"],
+          "format": "CSV",
+          "partitioned": true,
+          "partition_key": "date",
+          "partition_type": "DATE",
+          "id_type": "UUID",
+          "glue_tables": ["migrated_data.pc_results_part"],
+          "notes": "Filter by file_type='ar_flow'."
+        }
+      },
+      "preferred_query_table": "migrated_data.pc_results_part",
+      "preferred_timeseries_table": "migrated_data.timeseries",
+      "query_filter": "file_type = 'ar_flow'",
+      "id_transition": "Patient ID changes from integer to UUID at migrated stage."
+    },
+    "af_ppg_flow": {
+      "description": "Atrial fibrillation PPG-based detection flow",
+      "recording_type": "triggered",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/af_ppg_flow/",
+          "file_patterns": [
+            "af_ppg_flow_{patient_id}_{epoch_ms}.csv",
+            "af_ppg_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "af_ppg_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 810,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "Small dataset for AF detection via PPG signal analysis."
+        }
+      },
+      "preferred_query_table": null,
+      "notes": "No dedicated Glue table and no confirmed migrated stage. May reach migrated_data.timeseries as a file_type but not confirmed."
+    },
+    "tachycardia_flow": {
+      "description": "Tachycardia detection flow — triggered by elevated heart rate",
+      "recording_type": "triggered",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/tachycardia_flow/",
+          "file_patterns": [
+            "tachycardia_flow_{patient_id}_{epoch_ms}.csv",
+            "tachycardia_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "tachycardia_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 426,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "Tachycardia detection recordings."
+        }
+      },
+      "preferred_query_table": null,
+      "notes": "No dedicated Glue table. May reach migrated_data via file_type but not confirmed."
+    },
+    "plate_flow": {
+      "description": "Plate device flow — ECG plate-specific recordings",
+      "recording_type": "continuous",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/plate_flow/",
+          "file_patterns": [
+            "plate_flow_{patient_id}_{epoch_ms}.csv",
+            "plate_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "plate_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 1105,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "Plate-specific device recordings."
+        },
+        "post_computation": {
+          "bucket": "735555370207-app-events",
+          "prefix": "post-computation-layer/plate_flow/",
+          "file_patterns": [
+            "plate_flow_{patient_id}_{epoch_ms}-avg-values.csv",
+            "plate_flow_{patient_id}_{epoch_ms}.csv",
+            "plate_flow_{patient_id}_{epoch_ms}.json"
+          ],
+          "format": "CSV + JSON",
+          "object_count": null,
+          "partitioned": false,
+          "id_type": "integer",
+          "glue_tables": [],
+          "needs_refresh": true,
+          "notes": "Object count not captured in recovery session."
+        }
+      },
+      "preferred_query_table": null,
+      "notes": "No dedicated Glue table."
+    },
+    "algos_flow": {
+      "description": "Algorithm-specific flow — specialized algorithm data",
+      "recording_type": "triggered",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/algos_flow/",
+          "file_patterns": [
+            "algos_flow_{patient_id}_{epoch_ms}.csv",
+            "algos_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "algos_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": 3,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "notes": "Minimal data — only 1 patient (46), 1 recording. Experimental flow."
+        }
+      },
+      "preferred_query_table": null,
+      "notes": "Minimal dataset. No Glue table, no downstream stages observed."
+    },
+    "arrythmia_flow": {
+      "description": "Arrhythmia flow (note: 'arrythmia' is the actual spelling in S3, distinct from ar_flow)",
+      "recording_type": "triggered",
+      "stages": {
+        "rearrangement": {
+          "bucket": "735555370207-app-events",
+          "prefix": "rearrangement/arrythmia_flow/",
+          "file_patterns": [
+            "arrythmia_flow_{patient_id}_{epoch_ms}.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}_metadata.txt",
+            "arrythmia_flow_{patient_id}_{epoch_ms}_session.tmp"
+          ],
+          "format": "CSV + TXT + TMP",
+          "object_count": null,
+          "partitioned": false,
+          "id_type": "integer",
+          "timestamp_type": "epoch_milliseconds",
+          "glue_tables": [],
+          "needs_refresh": true,
+          "notes": "Object count not captured. Distinct from ar_flow (different pipeline path)."
+        },
+        "post_computation": {
+          "bucket": "735555370207-app-events",
+          "prefix": "post-computation-layer/arrythmia_flow/",
+          "file_patterns": [
+            "arrythmia_flow_{patient_id}_{epoch_ms}-avg-values.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}.csv",
+            "arrythmia_flow_{patient_id}_{epoch_ms}.json"
+          ],
+          "format": "CSV + JSON",
+          "object_count": 3,
+          "partitioned": false,
+          "id_type": "integer",
+          "glue_tables": [],
+          "notes": "Only 1 patient (431) with 1 recording."
+        }
+      },
+      "preferred_query_table": null,
+      "notes": "Small dataset. No Glue table."
+    }
+  },
+  "supporting_datasets": {
+    "error_events": {
+      "description": "Pipeline error events — failed processing records",
+      "bucket": "735555370207-app-events",
+      "prefix": "error_events/",
+      "file_patterns": ["cs_errorevents_{patient_id}_{epoch_sec}.csv"],
+      "format": "CSV",
+      "object_count": 321352,
+      "glue_tables": [],
+      "notes": "Not queryable via Athena. Useful for pipeline debugging."
+    },
+    "rt_sessions": {
+      "description": "Real-time session summary JSON files",
+      "bucket": "735555370207-app-events",
+      "prefix": "rt-sessions/",
+      "file_patterns": ["cs_realtime_{patient_id}_{datetime_YYYYMMDDHHmmss}.json"],
+      "format": "JSON",
+      "object_count": 13010,
+      "glue_tables": [],
+      "notes": "Session-level JSON summaries. Also contains pdf/ sub-prefix for reports."
+    },
+    "pipeline_monitor": {
+      "description": "Pipeline health monitoring files",
+      "bucket": "735555370207-migrated--data",
+      "prefix": "pipeline-monitor/",
+      "file_patterns": ["{flow_type}_{patient_id}.monitor.csv"],
+      "format": "CSV",
+      "object_count": 226511,
+      "glue_tables": [],
+      "notes": "Monitoring files covering all flow types. Not queryable via Athena."
+    },
+    "curated_ml": {
+      "description": "Curated and labeled ML training datasets",
+      "bucket": "735555370207-datasets-versioning",
+      "prefix": "",
+      "file_patterns": ["part-NNNNN-{uuid}.c000.snappy.parquet"],
+      "format": "Snappy Parquet",
+      "partition_scheme": "session=UUID/",
+      "partition_count": 54,
+      "glue_tables": ["migrated_data.curated"],
+      "notes": "Spark-generated output. Used for ML model training. Also contains labeled_data/dataset.csv."
+    },
+    "metadata": {
+      "description": "Session recording metadata (watch info, versions, quality, timing)",
+      "bucket": "735555370207-migrated--data",
+      "prefix": "meta-data/",
+      "format": "CSV",
+      "glue_tables": ["migrated_data.metadata"],
+      "notes": "WARNING: 70 columns, 215K+ rows, NO partition in Glue. Every query is a full scan. Also has a Parquet version at meta-data-parquet/ (not in Glue)."
+    }
+  }
+}

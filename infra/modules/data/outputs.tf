@@ -14,6 +14,14 @@ output "cost_table_arn" {
   value = aws_dynamodb_table.cost.arn
 }
 
+output "patient_id_map_table_name" {
+  value = aws_dynamodb_table.patient_id_map.name
+}
+
+output "patient_id_map_table_arn" {
+  value = aws_dynamodb_table.patient_id_map.arn
+}
+
 output "output_bucket_name" {
   value = aws_s3_bucket.output.id
 }

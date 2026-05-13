@@ -27,10 +27,24 @@ class Settings(BaseSettings):
     athena_default_database: str = "migrated_data"
     athena_max_rows: int = 1000
     athena_results_bucket: str | None = None
+    athena_max_scan_gb_default: float = 1.0
+    athena_cost_per_tb_usd: float = 5.0
 
     sessions_table: str = "claude-aws-agent-staging-sessions"
     cost_table: str = "claude-aws-agent-staging-cost"
     output_bucket: str | None = None
+
+    advice_prefix: str = "advice/raw"
+    playbooks_dir: str = "/app/knowledge/playbooks"
+    lessons_curated_path: str = "/app/knowledge/lessons/curated.md"
+
+    events_bucket: str | None = None
+    event_sessions_table: str = "migrated_data.event_sessions"
+
+    patient_id_uuid_map_table: str | None = None
+    patient_resolver_url: str | None = None
+    patient_resolver_token_secret_name: str | None = None
+    patient_resolver_timeout_s: int = 10
 
     log_level: str = "INFO"
     allow_writes: bool = False

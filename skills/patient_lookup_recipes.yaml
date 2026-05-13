@@ -1,0 +1,76 @@
+description: Step-by-step recipes for the most common per-patient questions. Load when the user gives a patient_id and asks about that specific patient's data, files, sessions, uploads, or downloads.
+version: 1
+
+recipes:
+
+  last_upload:
+    triggers: ["last upload", "last file", "most recent recording", "מתי העלה", "קובץ אחרון"]
+    inputs: [patient_id, optional flow]
+    steps:
+      - tool: find_patient_last_upload
+        args: {patient_id: "<int>", flow: "<optional, default scan all>"}
+      - format: "Last upload for patient {patient_id}: {flow} on {datetime} ({key})"
+    notes: Cheaper than any Athena query.
+
+  files_in_window:
+    triggers: ["files between", "recordings in", "sessions on", "during"]
+    inputs: [patient_id, flow, time_window]
+    steps:
+      - tool: list_patient_files
+        args: {patient_id: "<int>", flow: "<flow>", time_window: {start: "<ISO>", end: "<ISO>"}}
+      - format: "Found {n} files. {summary}. List top 10 with their key + duration estimate from filename."
+
+  monthly_usage:
+    triggers: ["how much in", "monthly usage", "average per", "use in last"]
+    inputs: [patient_id, days, optional flow]
+    steps:
+      - tool: patient_usage_summary
+        args: {patient_id: "<int>", flow: "<optional>", days: "<int>"}
+      - format: "{flow}: {file_count} files, {total_minutes} minutes recorded across {n_days} days. Per-day breakdown: {table}"
+    notes: |
+      For RT flow, file_count × ~2 min ≈ minutes (then refine with probe on a sample).
+      For sleep_flow, file_count × ~25 min ≈ minutes (sessions chained over a night).
+
+  download_link:
+    triggers: ["download link", "give me the file", "share", "presign", "url", "מזג"]
+    inputs: [bucket, key, optional expires_in]
+    steps:
+      - tool: presign_s3_object
+        args: {bucket: "<bucket>", key: "<full key>", expires_in: 3600}
+      - format: "Presigned URL (expires in {expires_in}s): {url}\n\nThis link is read-only and works for the next hour."
+
+  merge_window:
+    triggers: ["merge", "combine files", "single CSV", "אחד קובץ", "מזג קבצים"]
+    inputs: [patient_id, flow, start, end]
+    steps:
+      - tool: merge_patient_window
+        args: {patient_id: "<int>", flow: "<flow>", start: "<ISO>", end: "<ISO>", format: csv}
+      - format: "Merged {files_merged} files into one CSV with {rows} rows. Download (1h): {presigned_url}"
+    notes: |
+      For windows > 4 hours, ask the user to confirm — output may exceed 100 MB.
+      Sleep_flow typical session is 6-8 hours (multiple chained 25-min files).
+
+  signal_at_time:
+    triggers: ["HR at", "ECG at", "value at", "what was the"]
+    inputs: [patient_id, datetime, signal_column]
+    steps:
+      - "Resolve patient integer→UUID: query migrated_data.metadata WHERE patient_yob is not null AND time_init <= datetime AND time_end >= datetime — pick session, get UUID. (This step is expensive — ask the user for UUID directly when possible.)"
+      - "Query migrated_data.timeseries (or pc_timeseries for Cardiolyse-enriched) WHERE date='YYYY-MM-DD' AND patient='<UUID>' AND sampling_time BETWEEN datetime - 5s AND datetime + 5s LIMIT 100"
+      - format: Show the exact sample row with method/caveats noted.
+
+  ecg_events_in_window:
+    triggers: ["ECG events", "AFib episodes", "arrhythmia in", "rhythm changes"]
+    inputs: [patient_id_uuid, date_range]
+    steps:
+      - "Query migrated_data.pc_timeseries WHERE date BETWEEN ... AND patient='<UUID>' AND `crlyse-annotation` <> 'NSR' AND `crlyse-annotation` IS NOT NULL — group/count by annotation."
+      - format: "{n_events} non-NSR annotations across {n_sessions} sessions. Top events: {table}."
+
+  did_patient_sleep_with_watch:
+    triggers: ["sleep with the watch", "wore watch overnight", "ישן עם השעון"]
+    inputs: [patient_id, last_n_nights]
+    steps:
+      - tool: list_patient_files
+        args: {patient_id: "<int>", flow: sleep_flow, time_window: {start: "<n nights ago>", end: "<now>"}}
+      - format: "Found {n} sleep_flow files spanning {start_time}–{end_time}. Total {minutes} min recorded over {nights} nights."
+
+related_skills: [naming_conventions, rearrangement_skill, sleep_skill, rt_skill, cross_cutting_recipes]

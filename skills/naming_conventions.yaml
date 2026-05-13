@@ -1,0 +1,51 @@
+description: Authoritative S3 filename grammar — load whenever you need to construct, parse, or filter on S3 keys under 735555370207-app-events.
+version: 1
+applies_to:
+  bucket: 735555370207-app-events
+
+key_grammar: |
+  Universal: {stage_prefix}/{flow_or_subtype}/{filename}
+  Patient ID is always a bare integer (3-4 digits).
+  epoch_ms is 13 digits (milliseconds since UTC epoch); epoch_sec is 10 digits.
+
+prefixes:
+  rearrangement:
+    base: rearrangement/{flow}/
+    flows: [rt_flow, sleep_flow, ar_flow, af_ppg_flow, arrythmia_flow, algos_flow, plate_flow, tachycardia_flow]
+    files:
+      - "{flow}_{patient_id}_{epoch_ms}.csv      # data CSV"
+      - "{flow}_{patient_id}_{epoch_ms}_metadata.txt  # watch metadata"
+      - "{flow}_{patient_id}_{epoch_ms}_session.tmp   # session marker (~36 bytes)"
+  post_computation:
+    base: post-computation-layer/{flow}/
+    flows: [rt_flow, arrythmia_flow, plate_flow]   # ONLY these 3 flows have post-computation
+    files:
+      - "{flow}_{patient_id}_{epoch_ms}.csv             # enriched timeseries"
+      - "{flow}_{patient_id}_{epoch_ms}.json            # full session summary (12-25 MB)"
+      - "{flow}_{patient_id}_{epoch_ms}-avg-values.csv  # per-session averages (~1 KB)"
+  incoming:
+    base: incoming/
+    files:
+      - "{flow}_{patient_id}_{epoch_ms}.dat.zip   # binary zip — NOT cs_events_*.csv anymore (verified 2026-05-02)"
+  processed:
+    base: processed/
+    files:
+      - "cs_events_{patient_id}_{epoch_sec}.csv   # epoch_sec is 10 digits, NOT 13"
+  rt_sessions:
+    base: rt-sessions/
+    files:
+      - "cs_realtime_{patient_id}_{YYYYMMDDHHMMSS}.json   # 14-digit local timestamp, NOT epoch"
+  doctor_sessions:
+    base: doctor-realtime-session/
+    files:
+      - "realtime-doctorId-{doctor_id}-pId-{patient_id}-{epoch_ms}.json"
+      - "realtime-docId-{doctor_id}-pId-{patient_id}-{epoch_ms}.json"
+      - "{doctor_id}-{patient_id}-realtime.json   # legacy variant"
+
+filtering_rules:
+  - "Always skip keys ending in '/' — those are zero-byte folder markers, not data."
+  - "When listing a single patient's files in a flow, use prefix 'rearrangement/{flow}/{flow}_{patient_id}_' to scope the LIST tightly."
+  - "S3 lexicographic sort = chronological sort because epoch_ms is fixed-width 13 digits. Use S3 'StartAfter' to skip everything before a given epoch_ms."
+  - "Never trust S3 LastModified for recording time. Always parse epoch_ms from the filename. Upload lag varies from minutes to hours."
+
+related_tool: parse_app_events_key

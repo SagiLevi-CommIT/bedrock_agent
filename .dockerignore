@@ -14,5 +14,8 @@ ui/dist
 .github
 ui/.vite
 app/tests
-**/*.md
+*.md
 !README.md
+!prompts/**/*.md
+!knowledge/**/*.md
+!skills/**/*.md
