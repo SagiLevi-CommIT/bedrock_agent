@@ -200,7 +200,18 @@ as `TOOL_API_TOKEN`, the agent reads it at runtime via
 Artifacts (presigned standalone viewer / CSVs) land under
 `s3://claude-aws-agent-staging-output-735555370207/artifacts/<job_id>/`.
 
-**Deployed + live-validated 2026-06-11** (agent `5aa27af9`, tool `512c9899`):
+**Round 2 deployed + live-validated 2026-06-11** (agent `70151773`, tool `a37727e2`):
+model `qwen.qwen3-235b-a22b-2507-v1:0` (Sonnet AND Nova both SCP-blocked — the SCP
+is region-scoped, so cross-region inference-profile models like Nova fan out to
+denied regions; only ON_DEMAND in-region models work); 44 tools. Validated:
+`patient_timeline` (per-day sleep/rt, `strategy=migrated`), `visualize_rt_file`
+(rt_flow per-file viewer, presigned standalone), `get_patient_report` (real PDF
+found, presigned in place, `open_report_pdf` button), agent prose emits NO
+fabricated URLs under Qwen. UI: markdown links open in a new tab (non-http inert),
+chat history persists to localStorage. Tool image base pulled from ECR Public
+(Docker Hub 429 fix). Tool-api task role gained patient-reports read + RestoreObject.
+
+**Round 1 deployed + live-validated 2026-06-11** (agent `5aa27af9`, tool `512c9899`):
 `/tool-api/health` 200; bearer enforced (401 without, Cardiolys consent 412);
 `/v1/availability` patient 739 → `strategy=migrated, provenance=resolver`;
 agent chat → `check_data_availability` over the private Cloud Map path (one
