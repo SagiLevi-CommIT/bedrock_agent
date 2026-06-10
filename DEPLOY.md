@@ -200,6 +200,26 @@ as `TOOL_API_TOKEN`, the agent reads it at runtime via
 Artifacts (presigned standalone viewer / CSVs) land under
 `s3://claude-aws-agent-staging-output-735555370207/artifacts/<job_id>/`.
 
+**Deployed + live-validated 2026-06-11** (agent `5aa27af9`, tool `512c9899`):
+`/tool-api/health` 200; bearer enforced (401 without, Cardiolys consent 412);
+`/v1/availability` patient 739 → `strategy=migrated, provenance=resolver`;
+agent chat → `check_data_availability` over the private Cloud Map path (one
+tool call, ~10s); visualization job → 460k rows, 100% coverage, presigned
+166 MB standalone viewer (ranged GET 206) + `download_standalone` button in
+`ChatResponse.actions`.
+
+Hard-won deployment gotchas (already encoded in code/infra — do not regress):
+- **tool-api runs ONE uvicorn worker and ONE ECS task** — the v1 job store is
+  in-process; a second worker/task makes submit/poll land on different
+  processes → "Unknown job_id". Scale only after moving jobs to SQS/DynamoDB.
+- **The agent→tool-api SG rule must stay INLINE** in `modules/alb`'s ECS SG —
+  a standalone `aws_security_group_rule` on that inline-rule SG gets silently
+  wiped on the SG's next update (this exact regression happened on first
+  deploy, surfacing as httpx ConnectTimeout from the agent).
+- Mistral sometimes fabricates a markdown link in prose despite the prompt
+  rule; the deterministic `actions` buttons carry the REAL URLs — UI users
+  should use the buttons. (Known model-reliability issue, revisit with Claude.)
+
 ## Outputs of the staging stack
 
 ```
