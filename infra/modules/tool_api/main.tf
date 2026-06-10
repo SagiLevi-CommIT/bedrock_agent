@@ -160,6 +160,118 @@ resource "aws_iam_role_policy" "exec_secrets" {
   policy = data.aws_iam_policy_document.exec_secrets.json
 }
 
+# --- CodeBuild: builds the tool image (no local Docker on operator machines) --
+# Mirrors modules/codebuild but for the TOOL repo's Dockerfile.api: the operator
+# zips the tool repo source to <source_bucket>/tool-api-source.zip and starts a
+# build with IMAGE_TAG=<tool-repo-short-sha> (see DEPLOY.md).
+resource "aws_cloudwatch_log_group" "codebuild" {
+  name              = "/aws/codebuild/${var.name_prefix}-image-build"
+  retention_in_days = 14
+}
+
+resource "aws_iam_role" "codebuild" {
+  name = "${var.name_prefix}-codebuild-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "codebuild.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "codebuild" {
+  name = "${var.name_prefix}-codebuild-policy"
+  role = aws_iam_role.codebuild.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "Logs"
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.codebuild.arn}:*"
+      },
+      {
+        Sid      = "EcrAuth"
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Sid    = "EcrPushPull"
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:CompleteLayerUpload",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:InitiateLayerUpload",
+          "ecr:PutImage",
+          "ecr:UploadLayerPart",
+          "ecr:BatchGetImage",
+          "ecr:DescribeImages",
+          "ecr:DescribeRepositories",
+        ]
+        Resource = aws_ecr_repository.this.arn
+      },
+      {
+        Sid      = "S3Source"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:ListBucket"]
+        Resource = [var.source_bucket_arn, "${var.source_bucket_arn}/*"]
+      },
+    ]
+  })
+}
+
+resource "aws_codebuild_project" "image" {
+  name          = "${var.name_prefix}-image-build"
+  description   = "Builds the tool-api container image (Dockerfile.api from the tool repo) and pushes to ECR. Triggered manually with IMAGE_TAG."
+  service_role  = aws_iam_role.codebuild.arn
+  build_timeout = 20
+
+  artifacts {
+    type = "NO_ARTIFACTS"
+  }
+
+  environment {
+    type            = "LINUX_CONTAINER"
+    compute_type    = "BUILD_GENERAL1_SMALL"
+    image           = "aws/codebuild/standard:7.0"
+    privileged_mode = true # required for docker
+  }
+
+  source {
+    type     = "S3"
+    location = "${var.source_bucket_name}/tool-api-source.zip"
+    # S3 source has no git SHA -> IMAGE_TAG must be passed via
+    # --environment-variables-override at start-build time.
+    buildspec = <<-EOT
+      version: 0.2
+      phases:
+        pre_build:
+          commands:
+            - test -n "$IMAGE_TAG" || { echo "IMAGE_TAG env var is required"; exit 1; }
+            - aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${split("/", aws_ecr_repository.this.repository_url)[0]}
+        build:
+          commands:
+            - cd $CODEBUILD_SRC_DIR
+            - docker build -f Dockerfile.api -t ${aws_ecr_repository.this.repository_url}:$IMAGE_TAG .
+        post_build:
+          commands:
+            - docker push ${aws_ecr_repository.this.repository_url}:$IMAGE_TAG
+    EOT
+  }
+
+  logs_config {
+    cloudwatch_logs {
+      group_name = aws_cloudwatch_log_group.codebuild.name
+    }
+  }
+}
+
 # --- Private service discovery (agent -> tool-api) ---------------------------
 # The agent task CANNOT reach the public ALB (WAF default-blocks non-office IPs,
 # and the NAT egress IP is not an office CIDR), so agent->tool-api goes over the

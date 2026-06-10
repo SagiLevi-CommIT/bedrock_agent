@@ -27,3 +27,8 @@ output "api_token_secret_arn" {
   description = "Secrets Manager ARN of the generated /tool-api bearer token."
   value       = aws_secretsmanager_secret.api_token.arn
 }
+
+output "codebuild_project_name" {
+  description = "CodeBuild project that builds the tool image from <source_bucket>/tool-api-source.zip."
+  value       = aws_codebuild_project.image.name
+}

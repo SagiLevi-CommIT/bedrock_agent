@@ -230,6 +230,8 @@ module "tool_api" {
   patient_id_map_table_arn  = module.data.patient_id_map_table_arn
   token_secret_arn          = data.aws_secretsmanager_secret.internal_token.arn
   api_token_secret_name     = local.tool_api_token_secret_name
+  source_bucket_name        = module.data.codebuild_source_bucket_name
+  source_bucket_arn         = module.data.codebuild_source_bucket_arn
 
   env = {
     AWS_REGION                = var.aws_region

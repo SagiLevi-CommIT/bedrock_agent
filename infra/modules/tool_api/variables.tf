@@ -106,6 +106,15 @@ variable "api_token_secret_name" {
   description = "Deterministic Secrets Manager name for the generated /tool-api bearer token (the agent references the same name without a module dependency)."
 }
 
+variable "source_bucket_name" {
+  type        = string
+  description = "Shared CodeBuild source bucket; the tool image builds from <bucket>/tool-api-source.zip."
+}
+
+variable "source_bucket_arn" {
+  type = string
+}
+
 variable "extra_secret_arns" {
   type        = list(string)
   default     = []

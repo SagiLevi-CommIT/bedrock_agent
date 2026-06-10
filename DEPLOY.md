@@ -159,23 +159,34 @@ its own image and ECS service behind the same ALB (`/tool-api/*`) + a private
 Cloud Map DNS (`tool-api.cs-internal:8000`) for agent→tool calls. Everything is
 gated by `enable_tool_api` (default `false` ⇒ zero live resources).
 
+No local Docker needed — the module ships its own **CodeBuild project**
+(`claude-aws-agent-staging-tool-api-image-build`) that builds the tool repo's
+`Dockerfile.api` from `<source-bucket>/tool-api-source.zip`.
+
 ```bash
-# 0. One-time: create the tool ECR repo (module is count-gated, so target it)
-#    Set in local terraform.tfvars first:
+# 0. One-time bootstrap: the ECS service needs the image to already exist, so
+#    first create ONLY the ECR repo + CodeBuild project (count-gated module ->
+#    targeted apply). Set in local terraform.tfvars first:
 #      enable_tool_api    = true
 #      tool_api_image_tag = "<tool-repo-short-sha>"
 cd infra/envs/staging
-terraform apply -target='module.tool_api[0].aws_ecr_repository.this'
+terraform apply \
+  -target='module.tool_api[0].aws_ecr_repository.this' \
+  -target='module.tool_api[0].aws_codebuild_project.image'
 
-# 1. Build + push the tool image (manual docker this round; no CodeBuild yet)
+# 1. Zip the tool repo source -> S3 -> CodeBuild (IMAGE_TAG is REQUIRED)
 cd ../../../../CardiacSense-s3-downloader-tool
-TAG=$(git rev-parse --short HEAD)
-REPO=735555370207.dkr.ecr.eu-central-1.amazonaws.com/claude-aws-agent-staging-tool-api-backend
-aws ecr get-login-password --profile cardiac-sense-staging | docker login --username AWS --password-stdin 735555370207.dkr.ecr.eu-central-1.amazonaws.com
-docker build -f Dockerfile.api -t "$REPO:$TAG" .
-docker push "$REPO:$TAG"
+TAG=$(git rev-parse --short=8 HEAD)
+BUCKET=$(aws s3api list-buckets --profile cardiac-sense-staging \
+  --query "Buckets[?starts_with(Name, 'claude-aws-agent-staging-codebuild-src-')].Name | [0]" --output text)
+git archive --format=zip --output=/tmp/tool-api-source.zip HEAD
+aws s3 cp /tmp/tool-api-source.zip "s3://$BUCKET/tool-api-source.zip" --profile cardiac-sense-staging
+aws codebuild start-build --project-name claude-aws-agent-staging-tool-api-image-build \
+  --environment-variables-override "name=IMAGE_TAG,value=$TAG,type=PLAINTEXT" \
+  --profile cardiac-sense-staging --region eu-central-1
 
-# 2. Full apply + wait (back in bedrock_agent/infra/envs/staging)
+# 2. Full apply + wait (back in bedrock_agent/infra/envs/staging, after the
+#    build SUCCEEDED and tool_api_image_tag=$TAG is set in terraform.tfvars)
 terraform apply
 aws ecs wait services-stable --cluster claude-aws-agent-staging-cluster \
   --services claude-aws-agent-staging-svc claude-aws-agent-staging-tool-api-svc
