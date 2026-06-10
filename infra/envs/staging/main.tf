@@ -233,6 +233,17 @@ module "tool_api" {
   source_bucket_name        = module.data.codebuild_source_bucket_name
   source_bucket_arn         = module.data.codebuild_source_bucket_arn
 
+  # SINGLE task until jobs move to a shared store (SQS/DynamoDB): the v1 job
+  # store is in-process, so a second task (or extra uvicorn workers) makes
+  # submit/poll land on different processes -> "Unknown job_id".
+  min_tasks = 1
+  max_tasks = 1
+
+  # Viz jobs merge CSVs + build plotly viewers in-memory (hundreds of MB for
+  # long ranges) -- the 512/1024 default OOMs. 1 vCPU / 4 GB headroom.
+  task_cpu    = 1024
+  task_memory = 4096
+
   env = {
     AWS_REGION                = var.aws_region
     TOOL_API_ARTIFACTS_BUCKET = module.data.output_bucket_name

@@ -299,19 +299,11 @@ resource "aws_service_discovery_service" "this" {
   }
 }
 
-# The shared ECS SG only allows ingress FROM THE ALB; task-to-task traffic is
-# otherwise blocked. This self-referencing rule lets the agent task (same SG)
-# reach the tool-api task on the container port. Lives in this module so it is
-# count-gated with everything else (no live change while enable_tool_api=false).
-resource "aws_security_group_rule" "task_to_task" {
-  type                     = "ingress"
-  from_port                = var.container_port
-  to_port                  = var.container_port
-  protocol                 = "tcp"
-  security_group_id        = var.ecs_security_group_id
-  source_security_group_id = var.ecs_security_group_id
-  description              = "agent task to tool-api task (same ECS SG, Cloud Map DNS)"
-}
+# NOTE: the task-to-task ingress rule (agent -> tool-api, same ECS SG) lives
+# INLINE in modules/alb's aws_security_group.ecs. It was originally a
+# standalone aws_security_group_rule here, but that SG manages rules inline,
+# so the next update of the SG resource silently wiped the standalone rule
+# (live regression, 2026-06-11). Do not re-add it here.
 
 # --- ALB target group + path-routed listener rule (/tool-api/*) --------------
 resource "aws_lb_target_group" "this" {

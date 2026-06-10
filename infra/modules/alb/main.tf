@@ -53,6 +53,18 @@ resource "aws_security_group" "ecs" {
     security_groups = [aws_security_group.alb.id]
   }
 
+  # Task-to-task on the container port (agent -> tool-api via Cloud Map DNS).
+  # MUST be inline: this SG uses inline ingress, so any rule added as a
+  # standalone aws_security_group_rule is silently wiped on the next update
+  # of this resource (that exact regression happened on 2026-06-11).
+  ingress {
+    description = "Task to task (same SG; agent to tool-api)"
+    from_port   = var.container_port
+    to_port     = var.container_port
+    protocol    = "tcp"
+    self        = true
+  }
+
   egress {
     from_port   = 0
     to_port     = 0
