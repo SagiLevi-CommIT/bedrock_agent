@@ -17,6 +17,7 @@ export interface Action {
     | "download_standalone"
     | "download_csv"
     | "open_cardiolys_raw"
+    | "open_report_pdf"
     | "open_visualization"
     | "open_tool_ui"
     | string;

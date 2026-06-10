@@ -75,6 +75,17 @@ data "aws_iam_policy_document" "task" {
     resources = ["${var.artifacts_bucket_arn}/artifacts/*"]
   }
 
+  # Patient-report PDFs (read for locate/presign; RestoreObject for the opt-in
+  # Glacier restore). Read-only otherwise -- no write/delete on this bucket.
+  dynamic "statement" {
+    for_each = var.reports_bucket_arn == "" ? [] : [var.reports_bucket_arn]
+    content {
+      sid       = "ReportsRead"
+      actions   = ["s3:GetObject", "s3:ListBucket", "s3:RestoreObject"]
+      resources = [statement.value, "${statement.value}/*"]
+    }
+  }
+
   # Athena + Glue catalog (read-only).
   statement {
     sid = "Athena"

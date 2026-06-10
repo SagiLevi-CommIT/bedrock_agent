@@ -44,6 +44,11 @@ def test_registry_loaded() -> None:
         "list_supported_cardiolys_types",
         "fetch_data",
         "generate_visualization",
+        "visualize_rt_file",
+        "patient_timeline",
+        "resolve_uuid_to_patient_id",
+        "get_patient_report",
+        "request_report_restore",
         "submit_cardiolys_analysis",
         "get_job_status",
     }

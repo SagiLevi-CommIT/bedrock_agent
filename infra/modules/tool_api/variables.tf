@@ -91,6 +91,12 @@ variable "artifacts_bucket_arn" {
   description = "Output bucket; task may write ONLY under artifacts/*."
 }
 
+variable "reports_bucket_arn" {
+  type        = string
+  default     = ""
+  description = "Patient-reports bucket ARN (read + Glacier RestoreObject for PDF reports). Empty disables the statement."
+}
+
 variable "patient_id_map_table_arn" {
   type        = string
   description = "Shared patient_id->UUID DynamoDB cache (RW)."

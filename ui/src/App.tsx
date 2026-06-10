@@ -10,9 +10,33 @@ function messageId(): string {
   return uuidv4({});
 }
 
+// Chat history lives only in React state, so a full-page navigation (e.g. an
+// accidental click on a same-origin link) used to wipe it. Persist to
+// localStorage so history survives reloads/mis-clicks. Keyed + version-tagged
+// so a schema change can't crash on stale data.
+const STORAGE_KEY = "cs-agent-chat-v1";
+
+function loadPersisted(): { messages: Message[]; sessionId: string | null } {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { messages: [], sessionId: null };
+    const parsed = JSON.parse(raw) as {
+      messages?: Message[];
+      sessionId?: string | null;
+    };
+    return {
+      messages: Array.isArray(parsed.messages) ? parsed.messages : [],
+      sessionId: parsed.sessionId ?? null,
+    };
+  } catch {
+    return { messages: [], sessionId: null };
+  }
+}
+
 export function App() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const persisted = loadPersisted();
+  const [messages, setMessages] = useState<Message[]>(persisted.messages);
+  const [sessionId, setSessionId] = useState<string | null>(persisted.sessionId);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -24,6 +48,15 @@ export function App() {
     const el = scroller.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, loading]);
+
+  // Persist chat on every change so it survives reload/navigation.
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ messages, sessionId }));
+    } catch {
+      // Quota/serialization failure is non-fatal — history just won't persist.
+    }
+  }, [messages, sessionId]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -77,6 +110,11 @@ export function App() {
     setMessages([]);
     setSessionId(null);
     setError(null);
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      // ignore
+    }
   }
 
   return (

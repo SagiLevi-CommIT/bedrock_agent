@@ -53,9 +53,9 @@ ALB="http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.co
 curl.exe -I "$ALB/"
 # 200 text/html (Vite-built SPA)
 
-# API — expect tools: 39 (28 native + 11 data-tool wrappers)
+# API — expect tools: 44 (28 native + 16 data-tool wrappers)
 curl.exe "$ALB/api/health"
-# {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":39}
+# {"status":"ok","region":"eu-central-1","model":"qwen.qwen3-235b-a22b-2507-v1:0","tools":44}
 
 curl.exe "$ALB/api/info"
 # {"service":"bedrock_agent","phase":"ui","tools":[ ... 39 sorted names ... ]}

@@ -232,10 +232,12 @@ def fetch_data(patient_id: int, start: str, end: str, flow: str = "sleep_flow",
 @tool(
     name="generate_visualization",
     description=(
-        "Start a server-side VISUALIZATION job (sleep_flow): fetch + build the "
-        "self-contained signal viewer (single HTML file) in the cloud. Returns a "
-        "job_id; poll get_job_status for the presigned viewer download link. "
-        "No files download to the user unless they click."
+        "Start a server-side VISUALIZATION job for a continuous **sleep_flow** "
+        "window: fetch + merge + build the self-contained signal viewer (single "
+        "HTML file) in the cloud. Returns a job_id; poll get_job_status for the "
+        "presigned viewer download link. For rt_flow (event/ECG) data, use "
+        "visualize_rt_file on a specific file instead. No files download to the "
+        "user unless they click."
     ),
     input_schema={
         "type": "object",
@@ -253,6 +255,138 @@ def generate_visualization(patient_id: int, start: str, end: str, flow: str = "s
         f"visualization job started: job_id={d['job_id']}. "
         f"Poll get_job_status({d['job_id']}) for the viewer download link."
     )
+
+
+@tool(
+    name="visualize_rt_file",
+    description=(
+        "Start a VISUALIZATION job for ONE rt_flow file (event/ECG data, no "
+        "merge). Use this for rt_flow — e.g. visualize a file returned by "
+        "find_arrhythmia_events or get_data_coverage. Pass the rt_flow S3 key. "
+        "Returns a job_id; poll get_job_status for the presigned viewer download "
+        "link. (rt_flow download+merge+visualize together is intentionally not "
+        "supported; per-file is the rt_flow viz path.)"
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"file_key": {"type": "string", "description": "rt_flow S3 key (e.g. rearrangement/rt_flow/rt_flow_739_<epoch>.csv)."}},
+        "required": ["file_key"],
+    },
+)
+def visualize_rt_file(file_key: str) -> str:
+    d = call_tool_api("POST", "/v1/visualize-rt-file", json_body={"file_key": file_key})
+    return (
+        f"rt_flow visualization job started: job_id={d['job_id']}. "
+        f"Poll get_job_status({d['job_id']}) for the viewer download link."
+    )
+
+
+@tool(
+    name="patient_timeline",
+    description=(
+        "Per-day upload/coverage timeline for a patient over a date range, across "
+        "BOTH flows (metadata only, no downloads). Answers 'when did they upload', "
+        "'which days have sleep vs rt data', 'which days are missing', 'is there "
+        "enough to visualize'. Returns per-day sleep/rt file counts + per-flow "
+        "coverage completeness/gaps."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "patient_id": {"type": "integer"},
+            "start": {"type": "string", "description": "ISO-8601 start (offset recommended)."},
+            "end": {"type": "string", "description": "ISO-8601 end."},
+        },
+        "required": ["patient_id", "start", "end"],
+    },
+)
+def patient_timeline(patient_id: int, start: str, end: str) -> str:
+    d = call_tool_api("POST", "/v1/timeline",
+                      json_body={"patient_id": int(patient_id), "start": start, "end": end})
+    days = d.get("days", [])
+    lines = [f"  {x['date']}: sleep={x['sleep_files']} rt={x['rt_files']}" for x in days[:40]]
+    pf = d.get("per_flow", {})
+    cov = "; ".join(
+        f"{flow}: files={v.get('total_files')} fully_covered={v.get('is_fully_covered')} gaps={v.get('gap_count')}"
+        for flow, v in pf.items()
+    )
+    return (
+        f"timeline patient {patient_id} [strategy={d.get('strategy')}]: "
+        f"{d.get('days_with_data')} day(s) with data.\n" + ("\n".join(lines) or "  (none)")
+        + (f"\ncoverage -> {cov}" if cov else "")
+    )
+
+
+@tool(
+    name="resolve_uuid_to_patient_id",
+    description=(
+        "Reverse mapping: patient UUID -> integer patient_id (for "
+        "validation/labelling). Deterministic, never invented. NOTE: this needs "
+        "the patients DB and only resolves when the mapping is already cached; "
+        "otherwise it returns an error (the DB is not reachable from the cloud "
+        "service). Prefer resolve_patient_context for the forward direction."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"patient_uuid": {"type": "string", "description": "Patient UUID."}},
+        "required": ["patient_uuid"],
+    },
+)
+def resolve_uuid_to_patient_id(patient_uuid: str) -> str:
+    d = call_tool_api("POST", "/v1/resolve-uuid", json_body={"patient_uuid": patient_uuid})
+    return f"uuid={patient_uuid} -> patient_id={d['patient_id']} (provenance: {d['provenance']})"
+
+
+@tool(
+    name="get_patient_report",
+    description=(
+        "Locate the Cardiolyse PDF report for an rt_flow recording (by its CSV S3 "
+        "key) and return its status. If available, a download button is attached. "
+        "Possible statuses: ok (link attached), not_found, glacier (needs restore "
+        "-> offer request_report_restore), access_denied, error. Use this to "
+        "answer 'is there a report / where / can I get it' instead of refusing."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {"file_key": {"type": "string", "description": "rt_flow CSV S3 key whose sibling PDF to find."}},
+        "required": ["file_key"],
+    },
+)
+def get_patient_report(file_key: str) -> str:
+    d = call_tool_api("POST", "/v1/reports/pdf", json_body={"file_key": file_key})
+    status = d.get("status")
+    if status == "ok" and d.get("presigned_url"):
+        add_action("open_report_pdf", "Open PDF report", d["presigned_url"])
+        return f"PDF report found ({d.get('pdf_key')}). Download button attached."
+    if status == "glacier":
+        return (
+            f"PDF report exists but is in Glacier ({d.get('pdf_key')}). It must be "
+            f"restored before download — ask the user, then call request_report_restore "
+            f"with pdf_key={d.get('pdf_key')!r}."
+        )
+    return f"PDF report status={status}: {d.get('message')}"
+
+
+@tool(
+    name="request_report_restore",
+    description=(
+        "Trigger a Glacier restore for a patient-report PDF that get_patient_report "
+        "reported as 'glacier'. Only call after the user explicitly asks to restore. "
+        "Restore takes minutes (Standard) to hours (Bulk); the user re-checks with "
+        "get_patient_report later."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "pdf_key": {"type": "string", "description": "PDF S3 key from get_patient_report."},
+            "tier": {"type": "string", "enum": ["Expedited", "Standard", "Bulk"], "default": "Standard"},
+        },
+        "required": ["pdf_key"],
+    },
+)
+def request_report_restore(pdf_key: str, tier: str = "Standard") -> str:
+    d = call_tool_api("POST", "/v1/reports/pdf/restore", json_body={"pdf_key": pdf_key, "tier": tier})
+    return f"restore requested for {pdf_key}: status={d.get('status')} — {d.get('message')}"
 
 
 @tool(

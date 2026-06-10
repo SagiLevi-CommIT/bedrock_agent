@@ -42,6 +42,12 @@ locals {
     "arn:aws:bedrock:${var.aws_region}:${var.expected_account_id}:inference-profile/eu.anthropic.*",
     "arn:aws:bedrock:${var.aws_region}:${var.expected_account_id}:inference-profile/global.anthropic.*",
   ]
+  # NOTE: cross-region inference profiles (eu.*/global.* for Amazon Nova,
+  # Pixtral, etc.) are NOT usable here -- the SCP p-lwuwinuh is region-scoped and
+  # denies bedrock invokes in the other EU regions those profiles fan out to
+  # (verified live: eu.amazon.nova-pro -> eu-west-3 -> explicit deny). Only
+  # ON_DEMAND foundation models invoked directly in eu-central-1 work. The active
+  # model (qwen.*) is an on-demand foundation model, covered by the qwen.* entry.
 
   cardiacsense_data_bucket_arns = [
     "arn:aws:s3:::735555370207-app-events",
@@ -174,11 +180,15 @@ module "ecs" {
     # claude-sonnet-4-5, haiku-4-5, sonnet-4 — every attempt fails with
     # `explicit deny in a service control policy
     # arn:aws:organizations::071204572266:policy/o-ld9q2iv86w/service_control_policy/p-lwuwinuh`).
-    # Until the SCP is updated to allow Anthropic in eu-central-1, we use
-    # Mistral devstral-2 as a placeholder so the chat path can be exercised
-    # end-to-end. Restoring Claude is a one-line change here.
-    BEDROCK_MODEL_ID                   = "mistral.devstral-2-123b"
-    BEDROCK_FAST_MODEL_ID              = "mistral.devstral-2-123b"
+    # Until the SCP is updated to allow Anthropic, we run Qwen3-235B (a22b-2507),
+    # the strongest Converse multi-step tool-use among models that work here.
+    # The SCP is region-scoped, so Amazon Nova/Pixtral (inference-profile-only ->
+    # cross-region fan-out) are ALSO blocked; only ON_DEMAND foundation models
+    # invoked directly in eu-central-1 work (verified live, 2026-06-11). Qwen3 is
+    # on-demand in-region. Restoring Claude is a one-line change here once the SCP
+    # is lifted (e.g. global.anthropic.claude-sonnet-4-5-20250929-v1:0).
+    BEDROCK_MODEL_ID                   = "qwen.qwen3-235b-a22b-2507-v1:0"
+    BEDROCK_FAST_MODEL_ID              = "qwen.qwen3-235b-a22b-2507-v1:0"
     ATHENA_WORKGROUP                   = "primary"
     ATHENA_DEFAULT_DATABASE            = "migrated_data"
     ATHENA_RESULTS_BUCKET              = module.data.athena_results_bucket_name
@@ -227,6 +237,7 @@ module "tool_api" {
   data_bucket_arns          = local.cardiacsense_data_bucket_arns
   athena_results_bucket_arn = module.data.athena_results_bucket_arn
   artifacts_bucket_arn      = module.data.output_bucket_arn
+  reports_bucket_arn        = "arn:aws:s3:::735555370207-patient-reports"
   patient_id_map_table_arn  = module.data.patient_id_map_table_arn
   token_secret_arn          = data.aws_secretsmanager_secret.internal_token.arn
   api_token_secret_name     = local.tool_api_token_secret_name

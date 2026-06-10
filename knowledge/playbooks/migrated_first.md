@@ -1,8 +1,17 @@
 # Migrated-first routing — when migrated_data beats S3 scanning
 
+**Retrieval hierarchy (always, for any data-location question):**
+1. migrated_data / DB mapping (patient_id↔UUID, `resolve_patient_context`)
+2. indexed migrated discovery — the data-tool wrappers (`check_data_availability`,
+   `get_data_coverage`, `patient_timeline`, `compare_sessions`): 0 S3 probes
+3. native S3 / Athena scans — ONLY as a fallback (tool-api down, or a question
+   migrated can't answer: byte sizes, raw key browsing, per-sample values)
+
+Never bypass migrated_data when steps 1–2 can answer the question.
+
 **Rule of thumb:** for *"does data exist / which days / where are the files / is it
-complete / how many sessions"* questions, **migrated_data answers in one cheap
-Athena query what S3 scanning needs hundreds of calls for.** Validated on staging
+complete / how many sessions / upload timeline"* questions, **migrated_data answers
+in one cheap Athena query what S3 scanning needs hundreds of calls for.** Validated on staging
 (2026-06-10): 7-day sleep_flow discovery = 0 S3 calls / ~4.5 s via migrated vs
 1,052 S3 calls / ~15 s via legacy listing+probing.
 

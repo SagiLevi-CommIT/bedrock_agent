@@ -17,8 +17,11 @@ class Settings(BaseSettings):
     aws_profile: str | None = None
 
     # Default kept as the desired Claude model so anyone running locally with
-    # the right SCP gets the right behavior. Production env var overrides
-    # this until the org SCP is updated to permit Anthropic.
+    # the right SCP gets the right behavior. The staging env var overrides this
+    # until the org SCP is updated to permit Anthropic; staging currently runs
+    # qwen.qwen3-235b-a22b-2507-v1:0 (on-demand in eu-central-1 — the SCP is
+    # region-scoped, so cross-region inference-profile models like Nova are also
+    # blocked; see infra/envs/staging/main.tf).
     bedrock_model_id: str = "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
     bedrock_fast_model_id: str = "global.anthropic.claude-haiku-4-5-20251001-v1:0"
     bedrock_max_tokens: int = 4096

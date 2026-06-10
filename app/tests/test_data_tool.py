@@ -28,6 +28,8 @@ def test_tools_are_registered():
         "summarize_available_files", "compare_sessions", "find_arrhythmia_events",
         "fetch_data", "generate_visualization", "submit_cardiolys_analysis",
         "get_job_status", "list_supported_cardiolys_types",
+        "visualize_rt_file", "patient_timeline", "resolve_uuid_to_patient_id",
+        "get_patient_report", "request_report_restore",
     ]:
         assert name in REGISTRY
 
@@ -157,3 +159,64 @@ def test_cardiolys_submits_with_consent():
         out = data_tool.submit_cardiolys_analysis(
             "rearrangement/rt_flow/rt_flow_739_1740825889000.csv", confirm_external=True)
     assert "job_card" in out
+
+
+# --------------------------------------------------------------------------- #
+# action URL guard (defense against non-https buttons reaching the UI)
+# --------------------------------------------------------------------------- #
+
+
+def test_add_action_rejects_non_https():
+    import pytest
+
+    from src.tools.actions import add_action, reset_actions
+
+    reset_actions()
+    with pytest.raises(ValueError):
+        add_action("download_standalone", "Open", "s3://bucket/key.html")
+
+
+# --------------------------------------------------------------------------- #
+# new capability wrappers (rt-viz, timeline, reverse map, PDF report)
+# --------------------------------------------------------------------------- #
+
+
+def test_visualize_rt_file_returns_job_id():
+    with _patch_api({"status": "ok", "job_id": "job_rt", "job_status": "queued"}):
+        out = data_tool.visualize_rt_file("rearrangement/rt_flow/rt_flow_739_1740825889000.csv")
+    assert "job_rt" in out and "get_job_status" in out
+
+
+def test_patient_timeline_lists_per_day():
+    payload = {"status": "ok", "patient_id": 739, "strategy": "migrated", "days_with_data": 2,
+               "days": [{"date": "2025-03-01", "sleep_files": 54, "rt_files": 2},
+                        {"date": "2025-03-02", "sleep_files": 54, "rt_files": 3}],
+               "per_flow": {"sleep_flow": {"total_files": 108, "is_fully_covered": True, "gap_count": 0}}}
+    with _patch_api(payload):
+        out = data_tool.patient_timeline(739, "2025-03-01T00:00:00+02:00", "2025-03-03T00:00:00+02:00")
+    assert "2025-03-01: sleep=54 rt=2" in out and "strategy=migrated" in out
+
+
+def test_resolve_uuid_to_patient_id():
+    with _patch_api({"status": "ok", "patient_id": 739, "provenance": "cache"}):
+        out = data_tool.resolve_uuid_to_patient_id("925605c3-aaaa-bbbb-cccc-ddddeeeeffff")
+    assert "patient_id=739" in out
+
+
+def test_get_patient_report_ok_emits_action():
+    reset_actions()
+    with _patch_api({"status": "ok", "pdf_key": "arrythmia/739/x-1.pdf",
+                     "presigned_url": "https://signed/report.pdf"}):
+        out = data_tool.get_patient_report("rearrangement/rt_flow/rt_flow_739_1740825889000.csv")
+    assert "found" in out.lower()
+    acts = collect_actions()
+    assert any(a["type"] == "open_report_pdf" for a in acts)
+
+
+def test_get_patient_report_glacier_no_action():
+    reset_actions()
+    with _patch_api({"status": "glacier", "pdf_key": "arrythmia/739/x-1.pdf",
+                     "message": "restore required"}):
+        out = data_tool.get_patient_report("rearrangement/rt_flow/rt_flow_739_1740825889000.csv")
+    assert "Glacier" in out and "request_report_restore" in out
+    assert collect_actions() == []
