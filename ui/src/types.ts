@@ -5,6 +5,25 @@ export interface ToolCall {
   latency_ms: number;
 }
 
+/**
+ * Deterministic clickable action built server-side from REAL tool results
+ * (presigned downloads: standalone viewer HTML, CSVs, raw Cardiolys JSON).
+ * The LLM never fabricates these URLs — see app/src/tools/actions.py.
+ * open_visualization / open_tool_ui are reserved for the future hosted
+ * viewer and /tool-ui web app.
+ */
+export interface Action {
+  type:
+    | "download_standalone"
+    | "download_csv"
+    | "open_cardiolys_raw"
+    | "open_visualization"
+    | "open_tool_ui"
+    | string;
+  label: string;
+  url: string;
+}
+
 export interface ChatResponse {
   session_id: string;
   request_id: string;
@@ -14,6 +33,7 @@ export interface ChatResponse {
   iterations: number;
   stop_reason: string;
   latency_ms: number;
+  actions?: Action[];
 }
 
 export interface UserMessage {
@@ -32,6 +52,7 @@ export interface AssistantMessage {
   latency_ms: number;
   request_id: string;
   stop_reason: string;
+  actions?: Action[];
 }
 
 export type Message = UserMessage | AssistantMessage;

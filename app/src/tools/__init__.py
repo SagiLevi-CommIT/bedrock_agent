@@ -77,6 +77,7 @@ def import_all() -> None:
         athena,
         check_aws,
         coverage,
+        data_tool,
         estimator,
         event_search,
         file_boundary,

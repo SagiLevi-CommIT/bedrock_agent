@@ -53,12 +53,17 @@ ALB="http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.co
 curl.exe -I "$ALB/"
 # 200 text/html (Vite-built SPA)
 
-# API — expect tools: 28
+# API — expect tools: 39 (28 native + 11 data-tool wrappers)
 curl.exe "$ALB/api/health"
-# {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":28}
+# {"status":"ok","region":"eu-central-1","model":"mistral.devstral-2-123b","tools":39}
 
 curl.exe "$ALB/api/info"
-# {"service":"bedrock_agent","phase":"ui","tools":[ ... 28 sorted names ... ]}
+# {"service":"bedrock_agent","phase":"ui","tools":[ ... 39 sorted names ... ]}
+
+# Tool API (only when enable_tool_api=true; bearer = the
+# claude-aws-agent-staging-tool-api-token secret)
+curl.exe "$ALB/tool-api/health"
+# {"status":"ok","service":"tool_api", ...}
 
 curl.exe -X POST "$ALB/api/chat" -H "Content-Type: application/json" \
   -d "{\"prompt\":\"Call check_aws_connection and reply in one sentence.\"}"
@@ -137,11 +142,52 @@ The IAM allow-list under `module.iam` already permits Anthropic, Mistral,
 Amazon, Cohere, OpenAI-OSS, Qwen, and ZAI providers — switching providers is
 primarily an env-var change once the SCP allows it.
 
-## Tool registry (28)
+## Tool registry (39)
 
 Authoritative list: **`GET /api/info`** (sorted names) or **`len(REGISTRY)`**
 via **`GET /api/health`** (`tools` field). Implementations live under
 `app/src/tools/` and are registered in `app/src/tools/__init__.py`.
+28 native `boto3` tools + 11 `httpx` wrappers (`app/src/tools/data_tool.py`)
+that call the deterministic Tool API; the wrappers fail with a clean
+"not configured" error (and the prompt routes to native tools) while
+`enable_tool_api=false`.
+
+## Deploying the Tool API (second ECS service)
+
+The deterministic data tool (`CardiacSense-s3-downloader-tool` repo) ships as
+its own image and ECS service behind the same ALB (`/tool-api/*`) + a private
+Cloud Map DNS (`tool-api.cs-internal:8000`) for agent→tool calls. Everything is
+gated by `enable_tool_api` (default `false` ⇒ zero live resources).
+
+```bash
+# 0. One-time: create the tool ECR repo (module is count-gated, so target it)
+#    Set in local terraform.tfvars first:
+#      enable_tool_api    = true
+#      tool_api_image_tag = "<tool-repo-short-sha>"
+cd infra/envs/staging
+terraform apply -target='module.tool_api[0].aws_ecr_repository.this'
+
+# 1. Build + push the tool image (manual docker this round; no CodeBuild yet)
+cd ../../../../CardiacSense-s3-downloader-tool
+TAG=$(git rev-parse --short HEAD)
+REPO=735555370207.dkr.ecr.eu-central-1.amazonaws.com/claude-aws-agent-staging-tool-api-backend
+aws ecr get-login-password --profile cardiac-sense-staging | docker login --username AWS --password-stdin 735555370207.dkr.ecr.eu-central-1.amazonaws.com
+docker build -f Dockerfile.api -t "$REPO:$TAG" .
+docker push "$REPO:$TAG"
+
+# 2. Full apply + wait (back in bedrock_agent/infra/envs/staging)
+terraform apply
+aws ecs wait services-stable --cluster claude-aws-agent-staging-cluster \
+  --services claude-aws-agent-staging-svc claude-aws-agent-staging-tool-api-svc
+```
+
+Auth: the apply generates the bearer secret
+`claude-aws-agent-staging-tool-api-token`; the tool container gets it injected
+as `TOOL_API_TOKEN`, the agent reads it at runtime via
+`TOOL_API_TOKEN_SECRET_NAME`. Rollback = previous SHA in `tool_api_image_tag`
+(disable entirely with `enable_tool_api=false`).
+Artifacts (presigned standalone viewer / CSVs) land under
+`s3://claude-aws-agent-staging-output-735555370207/artifacts/<job_id>/`.
 
 ## Outputs of the staging stack
 

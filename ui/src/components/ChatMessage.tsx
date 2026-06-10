@@ -1,10 +1,52 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { Message } from "../types";
+import type { Action, Message } from "../types";
 import { ToolTrace } from "./ToolTrace";
 
 interface Props {
   message: Message;
+}
+
+/** Icon + emphasis per action type. Unknown types fall back to a plain link. */
+const ACTION_STYLE: Record<string, { icon: string; primary: boolean }> = {
+  download_standalone: { icon: "📈", primary: true },
+  download_csv: { icon: "⬇️", primary: false },
+  open_cardiolys_raw: { icon: "🧾", primary: false },
+  // Reserved for the future hosted viewer / tool web UI:
+  open_visualization: { icon: "📈", primary: true },
+  open_tool_ui: { icon: "🛠️", primary: false },
+};
+
+/**
+ * Deterministic buttons built server-side from real tool results (viewer
+ * links, presigned downloads, deep links). Rendered as new-tab links so the
+ * chat session is never navigated away.
+ */
+function ActionButtons({ actions }: { actions?: Action[] }) {
+  if (!actions || actions.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {actions.map((a, i) => {
+        const style = ACTION_STYLE[a.type] ?? { icon: "🔗", primary: false };
+        return (
+          <a
+            key={`${a.type}-${i}`}
+            href={a.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={
+              style.primary
+                ? "inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-blue-700"
+                : "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm transition hover:bg-slate-50"
+            }
+          >
+            <span aria-hidden>{style.icon}</span>
+            {a.label}
+          </a>
+        );
+      })}
+    </div>
+  );
 }
 
 export function ChatMessage({ message }: Props) {
@@ -28,6 +70,7 @@ export function ChatMessage({ message }: Props) {
             {message.text || "_(empty response)_"}
           </ReactMarkdown>
         </div>
+        <ActionButtons actions={message.actions} />
         <ToolTrace trace={message.tool_trace} />
         <Footer message={message} />
       </div>

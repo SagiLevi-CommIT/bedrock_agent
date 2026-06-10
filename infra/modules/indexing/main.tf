@@ -40,11 +40,11 @@ resource "aws_glue_catalog_table" "sleep_flow_rearrangement_idx" {
   table_type    = "EXTERNAL_TABLE"
 
   parameters = {
-    EXTERNAL                  = "TRUE"
-    "skip.header.line.count"  = "1"
-    "classification"          = "csv"
-    "csv.delim"               = ","
-    "areColumnsQuoted"        = "false"
+    EXTERNAL                 = "TRUE"
+    "skip.header.line.count" = "1"
+    "classification"         = "csv"
+    "csv.delim"              = ","
+    "areColumnsQuoted"       = "false"
   }
 
   storage_descriptor {
@@ -55,7 +55,7 @@ resource "aws_glue_catalog_table" "sleep_flow_rearrangement_idx" {
     ser_de_info {
       serialization_library = "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
       parameters = {
-        "field.delim"      = ","
+        "field.delim"          = ","
         "serialization.format" = ","
       }
     }
@@ -133,15 +133,15 @@ resource "aws_glue_catalog_table" "patient_daily" {
   table_type    = "EXTERNAL_TABLE"
 
   parameters = {
-    EXTERNAL                       = "TRUE"
-    "classification"               = "parquet"
-    "projection.enabled"           = "true"
-    "projection.dt.type"           = "date"
-    "projection.dt.format"         = "yyyy-MM-dd"
-    "projection.dt.range"          = "2024-01-01,NOW"
-    "projection.dt.interval"       = "1"
-    "projection.dt.interval.unit"  = "DAYS"
-    "storage.location.template"    = "s3://${var.rollup_bucket}/rollup/patient_daily/dt=$${dt}/"
+    EXTERNAL                      = "TRUE"
+    "classification"              = "parquet"
+    "projection.enabled"          = "true"
+    "projection.dt.type"          = "date"
+    "projection.dt.format"        = "yyyy-MM-dd"
+    "projection.dt.range"         = "2024-01-01,NOW"
+    "projection.dt.interval"      = "1"
+    "projection.dt.interval.unit" = "DAYS"
+    "storage.location.template"   = "s3://${var.rollup_bucket}/rollup/patient_daily/dt=$${dt}/"
   }
 
   storage_descriptor {
@@ -159,18 +159,18 @@ resource "aws_glue_catalog_table" "patient_daily" {
       comment = "Bare integer patient id (matches S3 filenames). UUID mapping not stored here."
     }
     columns {
-      name = "patient_uuid"
-      type = "string"
+      name    = "patient_uuid"
+      type    = "string"
       comment = "UUID for this patient if known via metadata join; nullable."
     }
     columns {
-      name = "flow"
-      type = "string"
+      name    = "flow"
+      type    = "string"
       comment = "rt_flow / sleep_flow / ar_flow / af_ppg_flow / arrythmia_flow / algos_flow / plate_flow / tachycardia_flow"
     }
     columns {
-      name = "stage"
-      type = "string"
+      name    = "stage"
+      type    = "string"
       comment = "rearrangement | post_computation | migrated"
     }
     columns {
@@ -182,18 +182,18 @@ resource "aws_glue_catalog_table" "patient_daily" {
       type = "bigint"
     }
     columns {
-      name = "min_sampling_time"
-      type = "timestamp"
+      name    = "min_sampling_time"
+      type    = "timestamp"
       comment = "Earliest filename-derived recording start in this day."
     }
     columns {
-      name = "max_sampling_time"
-      type = "timestamp"
+      name    = "max_sampling_time"
+      type    = "timestamp"
       comment = "Latest filename-derived recording start in this day."
     }
     columns {
-      name = "total_duration_min"
-      type = "double"
+      name    = "total_duration_min"
+      type    = "double"
       comment = "Estimated total recording minutes (file_count * flow chunk heuristic)."
     }
     columns {
@@ -205,13 +205,13 @@ resource "aws_glue_catalog_table" "patient_daily" {
       type = "double"
     }
     columns {
-      name = "ecg_quality_pct"
-      type = "double"
+      name    = "ecg_quality_pct"
+      type    = "double"
       comment = "Fraction of timeseries rows in the day where qulity_ecg signal was usable. NULL for sleep_flow."
     }
     columns {
-      name = "af_event_count"
-      type = "int"
+      name    = "af_event_count"
+      type    = "int"
       comment = "Count of crlyse_annotation != NSR events in the day."
     }
     columns {

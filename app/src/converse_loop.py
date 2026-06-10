@@ -18,6 +18,7 @@ from .session_context import session_id_ctx
 from .settings import get_client, get_settings
 from .tools import call as call_tool
 from .tools import converse_tool_config
+from .tools.actions import collect_actions, reset_actions
 
 logger = logging.getLogger("agent.bedrock")
 
@@ -78,8 +79,9 @@ def converse(
     tool_config = converse_tool_config()
 
     token = session_id_ctx.set(session_id or "")
+    reset_actions()
     try:
-        return _converse_inner(
+        result = _converse_inner(
             messages=messages,
             request_id=request_id,
             s=s,
@@ -87,6 +89,9 @@ def converse(
             sys_text=sys_text,
             tool_config=tool_config,
         )
+        # Deterministic UI actions collected from real tool results this turn.
+        result["actions"] = collect_actions()
+        return result
     finally:
         session_id_ctx.reset(token)
 

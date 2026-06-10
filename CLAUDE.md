@@ -1,9 +1,12 @@
 # Working in this repo
 
 ## What this repo is
-AWS-hosted CardiacSense data chatbot. Direct Bedrock Converse + **28** in-process
-`boto3` tools (registry in `app/src/tools/`). **Region:** `eu-central-1`.
-**Environment:** staging only.
+AWS-hosted CardiacSense data chatbot. Direct Bedrock Converse + **39** in-process
+tools (registry in `app/src/tools/`): 28 native `boto3` tools + 11 thin `httpx`
+wrappers that call the deterministic **Tool API** (the S3 downloader/visualizer,
+repo `CardiacSense-s3-downloader-tool`, deployed as a second ECS service —
+`infra/modules/tool_api/`, gated by `enable_tool_api`). **Region:**
+`eu-central-1`. **Environment:** staging only.
 
 ## Hard constraints
 - **Never touch the production AWS account.** Every `aws ...` or Terraform call

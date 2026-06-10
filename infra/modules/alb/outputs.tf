@@ -21,3 +21,8 @@ output "alb_security_group_id" {
 output "ecs_security_group_id" {
   value = aws_security_group.ecs.id
 }
+
+output "active_listener_arn" {
+  description = "The active forwarding listener (HTTP in v1, HTTPS once a cert is set). Used to attach path-routed rules (e.g. /tool-api/*)."
+  value       = var.certificate_arn == "" ? aws_lb_listener.http[0].arn : aws_lb_listener.https[0].arn
+}

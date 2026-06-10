@@ -56,6 +56,7 @@ export function App() {
           latency_ms: r.latency_ms,
           request_id: r.request_id,
           stop_reason: r.stop_reason,
+          actions: r.actions ?? [],
         },
       ]);
     } catch (e: unknown) {

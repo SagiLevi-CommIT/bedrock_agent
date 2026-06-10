@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     patient_resolver_token_secret_name: str | None = None
     patient_resolver_timeout_s: int = 10
 
+    # Deterministic Tool API (the S3 data/visualization tool's HTTP surface,
+    # reached over the shared ALB / internal network). The agent calls it via
+    # httpx (see tools/tool_api_client.py); it owns fetch/coverage/visualize.
+    tool_api_base_url: str | None = None
+    tool_api_token: str | None = None  # direct bearer for local/dev
+    tool_api_token_secret_name: str | None = None  # Secrets Manager name in prod
+    tool_api_timeout_s: int = 30
+    # Path the chat UI links to when offering "open the data tool" preloaded.
+    tool_ui_base_path: str = "/tool-ui"
+
     log_level: str = "INFO"
     allow_writes: bool = False
 

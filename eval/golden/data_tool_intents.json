@@ -1,0 +1,68 @@
+{
+  "description": "Golden natural-language prompts for the deterministic data-tool integration. Each case names the FIRST tool the agent should call (the orchestration entry point) plus the tier and notes. A future eval runner can drive these against the Converse loop with the tool-api mocked.",
+  "version": 1,
+  "cases": [
+    {
+      "prompt": "What data do we have for patient 3525 last week?",
+      "expected_first_tool": "check_data_availability",
+      "tier": "inspect",
+      "notes": "Migrated-data availability; NO download. patient/flow/range extracted; 'last week' = prev 7 days."
+    },
+    {
+      "prompt": "Do we have any missing data for patient 3525 last night?",
+      "expected_first_tool": "get_data_coverage",
+      "tier": "inspect",
+      "notes": "Coverage/gaps; 'last night' = prev local 22:00 -> 07:00; metadata only."
+    },
+    {
+      "prompt": "Show me the respiratory data for patient 3525 last night.",
+      "expected_first_tool": "get_data_coverage",
+      "then": "generate_visualization",
+      "tier": "visualize",
+      "notes": "Check coverage first (cheap), then visualize sleep_flow with signal='respiratory'; returns a downloadable standalone viewer HTML. No local download unless the user clicks."
+    },
+    {
+      "prompt": "Visualize the sleep flow for patient 605 for 2026-06-09.",
+      "expected_first_tool": "generate_visualization",
+      "tier": "visualize",
+      "notes": "Async job -> poll get_job_status -> viewer button."
+    },
+    {
+      "prompt": "Download last night's CSV for patient 3525.",
+      "expected_first_tool": "fetch_data",
+      "tier": "download",
+      "notes": "Explicit download request only -> async job -> presigned CSV link via get_job_status."
+    },
+    {
+      "prompt": "Compare patient 3525's last night to the night before.",
+      "expected_first_tool": "compare_sessions",
+      "tier": "inspect",
+      "notes": "Two ranges A/B; coverage diff; metadata only."
+    },
+    {
+      "prompt": "Show me AFib episodes for patient 739 this month.",
+      "expected_first_tool": "find_arrhythmia_events",
+      "tier": "inspect",
+      "notes": "arrhythmia='Atrial Fibrillation' (use list_supported_cardiolys_types/list_arrhythmia_labels if unsure)."
+    },
+    {
+      "prompt": "Does Cardiolys detect arrhythmias in rearrangement/rt_flow/rt_flow_739_1740825889000.csv?",
+      "expected_first_tool": "ASK_CONFIRMATION",
+      "then": "submit_cardiolys_analysis(confirm_external=true)",
+      "tier": "cardiolys",
+      "notes": "MUST ask the user to confirm the external ECG send before submit. Present result with provenance separation. (A validate_cardiolys_input wrapper is future work; the tool-api /v1/cardiolys/validate-input endpoint exists.)"
+    },
+    {
+      "prompt": "Resolve patient 605 to its UUID.",
+      "expected_first_tool": "resolve_patient_context",
+      "tier": "inspect",
+      "notes": "Deterministic mapping (+provenance); never invent a UUID."
+    },
+    {
+      "prompt": "Is patient 3525's recording for last night complete, and how good is the quality?",
+      "expected_first_tool": "summarize_available_files",
+      "tier": "inspect",
+      "notes": "Quality/coverage summary; metadata only."
+    }
+  ]
+}

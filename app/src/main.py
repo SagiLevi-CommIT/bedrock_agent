@@ -129,6 +129,9 @@ class ChatResponse(BaseModel):
     iterations: int
     stop_reason: str
     latency_ms: int
+    # Deterministic clickable actions (viewer/CSV/deep links) built from real
+    # tool results -- the UI renders these as buttons; the LLM never invents URLs.
+    actions: list[dict[str, Any]] = []
 
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -203,6 +206,7 @@ def chat(req: ChatRequest) -> ChatResponse:
         iterations=result["iterations"],
         stop_reason=result["stop_reason"],
         latency_ms=latency_ms,
+        actions=result.get("actions", []),
     )
 
 

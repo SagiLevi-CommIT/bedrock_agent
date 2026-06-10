@@ -34,6 +34,18 @@ def test_registry_loaded() -> None:
         "record_run_advice",
         "list_playbooks",
         "get_playbook",
+        # Deterministic data-tool wrappers (tools/data_tool.py)
+        "resolve_patient_context",
+        "get_data_coverage",
+        "check_data_availability",
+        "summarize_available_files",
+        "compare_sessions",
+        "find_arrhythmia_events",
+        "list_supported_cardiolys_types",
+        "fetch_data",
+        "generate_visualization",
+        "submit_cardiolys_analysis",
+        "get_job_status",
     }
     assert expected == set(REGISTRY.keys())
 

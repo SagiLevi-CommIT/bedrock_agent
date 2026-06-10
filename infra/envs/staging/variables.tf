@@ -34,6 +34,18 @@ variable "alarm_email" {
   description = "Email for SNS alarms and AWS Budget alerts."
 }
 
+variable "enable_tool_api" {
+  type        = bool
+  default     = false
+  description = "Deploy the deterministic Tool API service (the S3 data/visualization tool). OFF by default: flip on once the tool-api image is pushed and the §16 decisions are made (see infra/modules/tool_api/README.md)."
+}
+
+variable "tool_api_image_tag" {
+  type        = string
+  default     = ""
+  description = "Short git SHA of the tool-api image (required when enable_tool_api = true)."
+}
+
 variable "office_cidrs" {
   type        = list(string)
   description = "CIDRs allowed to reach the ALB. Provided by IT."
