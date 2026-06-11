@@ -200,6 +200,23 @@ as `TOOL_API_TOKEN`, the agent reads it at runtime via
 Artifacts (presigned standalone viewer / CSVs) land under
 `s3://claude-aws-agent-staging-output-735555370207/artifacts/<job_id>/`.
 
+**Round 2.2 quality follow-ups deployed + live-validated 2026-06-11**
+(agent `955b5596`, tool `206efb77`): from a Qwen3-235B conversational benchmark.
+- **index.html now `Cache-Control: no-store`** (hashed `/assets/*` stay cacheable) —
+  fixes the stale-bundle garbled-render symptom; verified `/` + SPA fallback send
+  no-store and reference the fresh asset hash.
+- **Per-day counts reconciled**: `availability`/`timeline` pad the discovery window
+  ±1 day then filter to the requested Asia/Jerusalem days — narrow (1-day) and
+  wide-range now return identical counts (verified `sleep=54` both ways for 739 on
+  2025-03-01; the earlier 51/45 undercounts are gone).
+- **Hebrew**: answers fully in Hebrew script with translated headers (תשובה/ראיות/
+  מתודולוגיה/הסתייגויות), no Latin transliteration (verified live).
+- **Cardiolys**: explicit requests now route to `validate_cardiolys_input` +
+  `list_supported_cardiolys_types` and the consent gate (not Athena event-search).
+- **Reference tracking**: `visualize_rt_file`/`get_job_status` echo the resolved
+  file_key; the model now flags data inconsistencies instead of fabricating keys.
+- Tests: agent 30, tool-api 73 green.
+
 **Round 2 deployed + live-validated 2026-06-11** (agent `70151773`, tool `a37727e2`):
 model `qwen.qwen3-235b-a22b-2507-v1:0` (Sonnet AND Nova both SCP-blocked — the SCP
 is region-scoped, so cross-region inference-profile models like Nova fan out to
