@@ -153,6 +153,18 @@ module "waf" {
   alb_arn             = module.alb.alb_arn
   office_cidrs        = var.office_cidrs
   rate_limit_per_5min = 1000
+  # Let CloudFront-originated MCP traffic through the office-IP allowlist via its
+  # secret origin header (empty when MCP is disabled -> rule absent).
+  origin_verify_secret = var.enable_mcp ? module.cloudfront[0].origin_verify_secret : ""
+}
+
+# Phase-1 public HTTPS entry for the MCP server (stable *.cloudfront.net host with
+# a valid managed TLS cert; no DNS ownership needed). Origin = the existing ALB.
+module "cloudfront" {
+  count        = var.enable_mcp ? 1 : 0
+  source       = "../../modules/cloudfront"
+  name_prefix  = local.name_prefix
+  alb_dns_name = module.alb.alb_dns_name
 }
 
 module "ecs" {

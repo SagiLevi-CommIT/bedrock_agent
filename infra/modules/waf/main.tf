@@ -24,9 +24,47 @@ resource "aws_wafv2_web_acl" "this" {
     block {}
   }
 
+  # Allow CloudFront-originated MCP traffic: CloudFront adds a secret
+  # X-Origin-Verify header that only it knows. Evaluated FIRST (priority 0) so it
+  # precedes the managed rule groups, and lets Claude Desktop's dynamic source
+  # IPs through the office-IP allowlist. The real auth is still the MCP bearer.
+  dynamic "rule" {
+    for_each = toset(var.origin_verify_secret == "" ? [] : ["enabled"])
+    content {
+      name     = "allow-cloudfront-origin"
+      priority = 0
+
+      action {
+        allow {}
+      }
+
+      statement {
+        byte_match_statement {
+          search_string         = var.origin_verify_secret
+          positional_constraint = "EXACTLY"
+          field_to_match {
+            single_header {
+              name = "x-origin-verify"
+            }
+          }
+          text_transformation {
+            priority = 0
+            type     = "NONE"
+          }
+        }
+      }
+
+      visibility_config {
+        cloudwatch_metrics_enabled = true
+        metric_name                = "${var.name_prefix}-allow-cf-origin"
+        sampled_requests_enabled   = true
+      }
+    }
+  }
+
   rule {
     name     = "allow-office-ips"
-    priority = 0
+    priority = 1
 
     action {
       allow {}
@@ -47,7 +85,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   rule {
     name     = "rate-limit-per-ip"
-    priority = 1
+    priority = 2
 
     action {
       block {}
@@ -69,7 +107,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   rule {
     name     = "aws-managed-common"
-    priority = 2
+    priority = 3
 
     override_action {
       none {}
@@ -91,7 +129,7 @@ resource "aws_wafv2_web_acl" "this" {
 
   rule {
     name     = "aws-managed-known-bad-inputs"
-    priority = 3
+    priority = 4
 
     override_action {
       none {}

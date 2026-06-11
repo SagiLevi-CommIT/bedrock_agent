@@ -46,6 +46,12 @@ variable "tool_api_image_tag" {
   description = "Short git SHA of the tool-api image (required when enable_tool_api = true)."
 }
 
+variable "enable_mcp" {
+  type        = bool
+  default     = false
+  description = "Provision the MCP HTTPS entry: CloudFront -> ALB + the WAF origin-verify rule. Requires enable_tool_api = true (the MCP server ships in the tool-api task)."
+}
+
 variable "office_cidrs" {
   type        = list(string)
   description = "CIDRs allowed to reach the ALB. Provided by IT."

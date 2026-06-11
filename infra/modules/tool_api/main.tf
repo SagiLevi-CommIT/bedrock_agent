@@ -353,6 +353,25 @@ resource "aws_lb_listener_rule" "tool_api" {
   }
 }
 
+# MCP + the tool-api's own root paths (reached via CloudFront). The MCP server and
+# the FastAPI tool-api share one container, so /mcp, /v1/*, and /health all go to
+# this target group. Evaluated before the agent default rule.
+resource "aws_lb_listener_rule" "mcp" {
+  listener_arn = var.alb_listener_arn
+  priority     = var.listener_rule_priority - 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.this.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/mcp", "/mcp/*", "/v1/*", "/health"]
+    }
+  }
+}
+
 # --- Task definition + service (in the existing cluster) ---------------------
 resource "aws_ecs_task_definition" "this" {
   family                   = "${var.name_prefix}-task"

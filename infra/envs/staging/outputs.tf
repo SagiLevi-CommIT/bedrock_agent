@@ -57,3 +57,8 @@ output "codebuild_project_name" {
 output "codebuild_source_bucket_name" {
   value = module.data.codebuild_source_bucket_name
 }
+
+output "mcp_endpoint" {
+  description = "Public MCP endpoint (Streamable HTTP) for Claude Desktop / mcp-remote."
+  value       = var.enable_mcp ? "https://${module.cloudfront[0].domain_name}/mcp" : ""
+}

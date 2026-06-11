@@ -16,3 +16,10 @@ variable "rate_limit_per_5min" {
   description = "Max requests per IP per 5 minutes. Counts only requests from allowlisted IPs that pass the prior rule."
   default     = 1000
 }
+
+variable "origin_verify_secret" {
+  type        = string
+  default     = ""
+  description = "When set, allow requests carrying X-Origin-Verify == this value (CloudFront origin header). Empty disables the rule."
+  sensitive   = true
+}
