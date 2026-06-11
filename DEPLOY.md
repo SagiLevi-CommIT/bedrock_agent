@@ -1,12 +1,12 @@
 # Deployment runbook (staging)
 
-Live URL (HTTP, IP-allowlisted by WAF — office CIDRs in `terraform.tfvars`
-`office_cidrs` reach the ALB):
-
-> http://claude-aws-agent-staging-alb-346464057.eu-central-1.elb.amazonaws.com
-
-Open that URL in a browser to use the chat UI. The same host serves `/api/*`
-for programmatic access; both share the WAF + ALB.
+> ⚠️ **ARCHITECTURE CHANGED (2026-06-11).** The Bedrock chat agent (ECS service,
+> `/api/chat`, React UI) has been **retired and torn down**. The platform is now a
+> cloud-hosted **MCP server** (Claude Desktop is the client). For the current
+> deploy/connect/rollback flow see **`docs/MCP_MIGRATION.md`**. MCP endpoint:
+> `https://dlx14274cj8xv.cloudfront.net/mcp`. The agent-specific sections below are
+> **historical** (kept for the shared platform context: ALB/WAF/VPC/cluster/CodeBuild
+> conventions still apply to the tool-api + MCP).
 
 **Account:** `735555370207`  
 **Region:** `eu-central-1`  

@@ -87,9 +87,23 @@ for `mcp.server.auth` TokenVerifier + RFC 9728 metadata; CloudFront/ALB/tools un
 company domain (ACM + Route53/Cloudflare) in place of the CloudFront default hostname; SQS/DynamoDB
 job store to lift the single-task pin; per-user audit.
 
-## Bedrock teardown (gated — see the migration plan's safe order)
-Agent-only resources to remove AFTER MCP is validated (each destructive step approval-gated):
-agent ECS service + task defs, `…-sessions` + `…-cost` tables, rollup Lambda + EventBridge + role,
-bedrock IAM (`task_bedrock` + `bedrock_model_arns`), agent ECR + CodeBuild + roles. **Never touch**
-shared infra: VPC/NAT, ALB (LB/listener/default-TG/ECS-SG), data buckets, athena-results +
-codebuild-src buckets, `patient-id-map`, `INTERNAL_TOKEN`, `tool-api-token`, the `tool_api` module.
+## Bedrock teardown — DONE (2026-06-11)
+Applied `enable_agent=false`: **35 agent-only resources destroyed** — agent ECS service +
+task def + autoscaling (cluster KEPT via `create_service` gating), agent ECR + CodeBuild +
+role + log group, agent IAM task/exec roles + all policies (incl. `task_bedrock` /
+`bedrock_model_arns`), indexing/rollup Lambda + EventBridge + Glue idx tables + role,
+DynamoDB `…-sessions` + `…-cost` tables. The agent chat **code** (`app/`, `ui/`, agent
+scripts + CI) was removed from Git (history preserves it).
+
+**Preserved (verified untouched):** VPC/NAT, ALB (LB/listener/default-TG/ECS-SG), WAF,
+CloudFront, the `tool_api` module + its ECS service/ECR/CodeBuild/IAM, data buckets,
+athena-results + codebuild-src buckets, `patient-id-map`, `INTERNAL_TOKEN`, `tool-api-token`,
+Cloud Map, CloudWatch log group.
+
+**Post-teardown evidence:** `terraform plan` → "No changes"; `aws ecs list-services` → only
+`claude-aws-agent-staging-tool-api-svc`; MCP `/health` via CloudFront → 200 (TLS verified).
+Rollback (if ever needed): `enable_agent=true` + re-apply rebuilds the agent infra (the chat
+code is in Git history); the sessions/cost tables would be recreated empty.
+
+To gate MCP off entirely: `enable_mcp=false` (removes CloudFront + the WAF origin rule;
+the tool-api `/v1` surface keeps working internally).
