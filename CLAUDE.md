@@ -1,12 +1,22 @@
 # Working in this repo
 
 ## What this repo is
-AWS-hosted CardiacSense data chatbot. Direct Bedrock Converse + **39** in-process
-tools (registry in `app/src/tools/`): 28 native `boto3` tools + 11 thin `httpx`
-wrappers that call the deterministic **Tool API** (the S3 downloader/visualizer,
-repo `CardiacSense-s3-downloader-tool`, deployed as a second ECS service —
-`infra/modules/tool_api/`, gated by `enable_tool_api`). **Region:**
-`eu-central-1`. **Environment:** staging only.
+CardiacSense data platform on AWS (`eu-central-1`, staging only). **As of the MCP
+migration (2026-06-11) this repo is primarily the Terraform/infra home** — the
+Bedrock chat agent (`app/`, `ui/`) is superseded by a cloud-hosted **MCP server**
+and **Claude Desktop** as the client. See `docs/MCP_MIGRATION.md`.
+
+- **MCP server** (the capability layer): lives in the tool repo
+  `CardiacSense-s3-downloader-tool/mcp_server/` (official `mcp` SDK / FastMCP,
+  Streamable HTTP), folded into the **tool-api** ECS task. 28 tools = 20
+  deterministic (`tool_api.services`) + 8 ad-hoc (Athena/Glue/S3/playbooks).
+  Public HTTPS via **CloudFront** (`infra/modules/cloudfront`, gated `enable_mcp`)
+  → ALB → tool-api. Auth = static bearer (Phase 1; OAuth/Cognito = Phase 2).
+- **Deterministic Tool API**: `infra/modules/tool_api/` (gated `enable_tool_api`),
+  the same ECS task — keeps `/v1/*` + `/tool-api/*` + `/health`.
+- **Legacy (being torn down)**: the Bedrock Converse agent — `app/` (39 tools),
+  `ui/`, `module.ecs`, sessions/cost tables, bedrock IAM, rollup Lambda. Removal
+  follows the safe order in `docs/MCP_MIGRATION.md`; shared infra is preserved.
 
 ## Hard constraints
 - **Never touch the production AWS account.** Every `aws ...` or Terraform call
