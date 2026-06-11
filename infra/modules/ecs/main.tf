@@ -26,7 +26,11 @@ resource "aws_ecs_cluster_capacity_providers" "this" {
   }
 }
 
+# The agent service/taskdef/autoscaling are count-gated so the Bedrock chat agent
+# can be torn down while KEEPING the shared cluster (the tool-api/MCP service runs
+# in it). create_service=false -> only the cluster + capacity providers remain.
 resource "aws_ecs_task_definition" "this" {
+  count                    = var.create_service ? 1 : 0
   family                   = "${var.name_prefix}-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
@@ -74,9 +78,10 @@ resource "aws_ecs_task_definition" "this" {
 }
 
 resource "aws_ecs_service" "this" {
+  count                              = var.create_service ? 1 : 0
   name                               = "${var.name_prefix}-svc"
   cluster                            = aws_ecs_cluster.this.id
-  task_definition                    = aws_ecs_task_definition.this.arn
+  task_definition                    = aws_ecs_task_definition.this[0].arn
   desired_count                      = var.min_tasks
   launch_type                        = "FARGATE"
   platform_version                   = "LATEST"
@@ -101,19 +106,21 @@ resource "aws_ecs_service" "this" {
 }
 
 resource "aws_appautoscaling_target" "ecs" {
+  count              = var.create_service ? 1 : 0
   max_capacity       = var.max_tasks
   min_capacity       = var.min_tasks
-  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.this.name}"
+  resource_id        = "service/${aws_ecs_cluster.this.name}/${aws_ecs_service.this[0].name}"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
 }
 
 resource "aws_appautoscaling_policy" "ecs_cpu" {
+  count              = var.create_service ? 1 : 0
   name               = "${var.name_prefix}-cpu-target"
   policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+  resource_id        = aws_appautoscaling_target.ecs[0].resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs[0].scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs[0].service_namespace
 
   target_tracking_scaling_policy_configuration {
     target_value = 60.0

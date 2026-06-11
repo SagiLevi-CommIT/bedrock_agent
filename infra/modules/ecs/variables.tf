@@ -19,11 +19,13 @@ variable "target_group_arn" {
 }
 
 variable "image_repository_url" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "image_tag" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "container_port" {
@@ -51,12 +53,20 @@ variable "max_tasks" {
   default = 4
 }
 
+variable "create_service" {
+  type        = bool
+  default     = true
+  description = "Create the agent ECS service/taskdef/autoscaling. false keeps only the shared cluster (Bedrock teardown)."
+}
+
 variable "exec_role_arn" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "task_role_arn" {
-  type = string
+  type    = string
+  default = ""
 }
 
 variable "log_group_name" {

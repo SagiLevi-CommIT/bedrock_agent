@@ -52,6 +52,12 @@ variable "enable_mcp" {
   description = "Provision the MCP HTTPS entry: CloudFront -> ALB + the WAF origin-verify rule. Requires enable_tool_api = true (the MCP server ships in the tool-api task)."
 }
 
+variable "enable_agent" {
+  type        = bool
+  default     = true
+  description = "The legacy Bedrock chat agent (ECS service, agent ECR/CodeBuild/IAM, sessions+cost tables, rollup Lambda). Set false to TEAR DOWN after the MCP migration; the shared cluster, ALB, data buckets, patient-id-map, secrets, and tool_api/MCP are preserved."
+}
+
 variable "office_cidrs" {
   type        = list(string)
   description = "CIDRs allowed to reach the ALB. Provided by IT."

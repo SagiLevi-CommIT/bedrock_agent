@@ -84,6 +84,7 @@ module "vpc" {
 }
 
 module "ecr" {
+  count       = var.enable_agent ? 1 : 0
   source      = "../../modules/ecr"
   name_prefix = local.name_prefix
 }
@@ -101,9 +102,12 @@ module "data" {
   source      = "../../modules/data"
   name_prefix = local.name_prefix
   account_id  = local.account_id
+  # sessions + cost tables are agent-only; the shared patient-id-map + buckets stay.
+  create_agent_tables = var.enable_agent
 }
 
 module "indexing" {
+  count                 = var.enable_agent ? 1 : 0
   source                = "../../modules/indexing"
   name_prefix           = local.name_prefix
   app_events_bucket     = "735555370207-app-events"
@@ -118,6 +122,7 @@ data "aws_secretsmanager_secret" "internal_token" {
 }
 
 module "iam" {
+  count                     = var.enable_agent ? 1 : 0
   source                    = "../../modules/iam"
   name_prefix               = local.name_prefix
   bedrock_model_arns        = local.bedrock_model_arns
@@ -167,22 +172,26 @@ module "cloudfront" {
   alb_dns_name = module.alb.alb_dns_name
 }
 
+# The ECS module ALWAYS provisions the shared cluster (the tool-api/MCP service
+# runs in it). create_service gates ONLY the Bedrock agent service/taskdef so it
+# can be torn down (enable_agent=false) without destroying the cluster.
 module "ecs" {
   source                = "../../modules/ecs"
   name_prefix           = local.name_prefix
   region                = var.aws_region
+  create_service        = var.enable_agent
   private_subnet_ids    = module.vpc.private_subnet_ids
   ecs_security_group_id = module.alb.ecs_security_group_id
   target_group_arn      = module.alb.target_group_arn
-  image_repository_url  = module.ecr.repository_url
+  image_repository_url  = var.enable_agent ? module.ecr[0].repository_url : ""
   image_tag             = var.image_tag
   container_port        = 8000
   task_cpu              = var.task_cpu
   task_memory           = var.task_memory
   min_tasks             = var.service_min_tasks
   max_tasks             = var.service_max_tasks
-  exec_role_arn         = module.iam.exec_role_arn
-  task_role_arn         = module.iam.task_role_arn
+  exec_role_arn         = var.enable_agent ? module.iam[0].exec_role_arn : ""
+  task_role_arn         = var.enable_agent ? module.iam[0].task_role_arn : ""
   log_group_name        = module.observability.log_group_name
   env = {
     AWS_REGION = var.aws_region
@@ -204,8 +213,8 @@ module "ecs" {
     ATHENA_WORKGROUP                   = "primary"
     ATHENA_DEFAULT_DATABASE            = "migrated_data"
     ATHENA_RESULTS_BUCKET              = module.data.athena_results_bucket_name
-    SESSIONS_TABLE                     = module.data.sessions_table_name
-    COST_TABLE                         = module.data.cost_table_name
+    SESSIONS_TABLE                     = module.data.sessions_table_name != null ? module.data.sessions_table_name : ""
+    COST_TABLE                         = module.data.cost_table_name != null ? module.data.cost_table_name : ""
     OUTPUT_BUCKET                      = module.data.output_bucket_name
     LOG_LEVEL                          = "INFO"
     ALLOW_WRITES                       = "false"
@@ -279,16 +288,17 @@ module "tool_api" {
 }
 
 module "codebuild" {
+  count              = var.enable_agent ? 1 : 0
   source             = "../../modules/codebuild"
   name_prefix        = local.name_prefix
   aws_region         = var.aws_region
-  ecr_repository_arn = module.ecr.repository_arn
-  ecr_repository_url = module.ecr.repository_url
+  ecr_repository_arn = module.ecr[0].repository_arn
+  ecr_repository_url = module.ecr[0].repository_url
   ecr_registry       = local.ecr_registry
   source_bucket_name = module.data.codebuild_source_bucket_name
   source_bucket_arn  = module.data.codebuild_source_bucket_arn
   passrole_arns = [
-    module.iam.exec_role_arn,
-    module.iam.task_role_arn,
+    module.iam[0].exec_role_arn,
+    module.iam[0].task_role_arn,
   ]
 }

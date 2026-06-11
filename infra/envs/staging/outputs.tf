@@ -11,7 +11,7 @@ output "public_subnet_ids" {
 }
 
 output "ecr_repository_url" {
-  value = module.ecr.repository_url
+  value = var.enable_agent ? module.ecr[0].repository_url : ""
 }
 
 output "alb_dns_name" {
@@ -31,7 +31,7 @@ output "log_group_name" {
 }
 
 output "task_role_arn" {
-  value = module.iam.task_role_arn
+  value = var.enable_agent ? module.iam[0].task_role_arn : ""
 }
 
 output "sessions_table_name" {
@@ -51,7 +51,7 @@ output "athena_results_bucket_name" {
 }
 
 output "codebuild_project_name" {
-  value = module.codebuild.project_name
+  value = var.enable_agent ? module.codebuild[0].project_name : ""
 }
 
 output "codebuild_source_bucket_name" {

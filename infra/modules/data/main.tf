@@ -8,7 +8,10 @@ terraform {
 }
 
 # Per-session conversation history. PK = session_id; sort = turn (timestamp).
+# Agent-only (Bedrock chat): count-gated so teardown removes it while keeping the
+# shared patient-id-map table + buckets in this module.
 resource "aws_dynamodb_table" "sessions" {
+  count        = var.create_agent_tables ? 1 : 0
   name         = "${var.name_prefix}-sessions"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "session_id"
@@ -34,8 +37,9 @@ resource "aws_dynamodb_table" "sessions" {
   }
 }
 
-# Per-request cost rollup (Bedrock + Athena + tool counts).
+# Per-request cost rollup (Bedrock + Athena + tool counts). Agent-only; gated.
 resource "aws_dynamodb_table" "cost" {
+  count        = var.create_agent_tables ? 1 : 0
   name         = "${var.name_prefix}-cost"
   billing_mode = "PAY_PER_REQUEST"
   hash_key     = "request_id"
