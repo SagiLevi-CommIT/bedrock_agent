@@ -181,10 +181,22 @@ def test_add_action_rejects_non_https():
 # --------------------------------------------------------------------------- #
 
 
-def test_visualize_rt_file_returns_job_id():
+def test_visualize_rt_file_returns_job_id_and_echoes_key():
     with _patch_api({"status": "ok", "job_id": "job_rt", "job_status": "queued"}):
         out = data_tool.visualize_rt_file("rearrangement/rt_flow/rt_flow_739_1740825889000.csv")
     assert "job_rt" in out and "get_job_status" in out
+    # echo the resolved file_key so cross-turn references stay anchored
+    assert "rt_flow_739_1740825889000.csv" in out
+
+
+def test_get_job_status_echoes_file_key():
+    reset_actions()
+    payload = {"status": "succeeded", "result": {"status": "ok",
+               "file_key": "rearrangement/rt_flow/rt_flow_739_1740825889000.csv",
+               "artifacts": {"standalone_url": "https://signed/index_standalone.html"}}}
+    with _patch_api(payload):
+        out = data_tool.get_job_status("job_rt")
+    assert "rt_flow_739_1740825889000.csv" in out
 
 
 def test_patient_timeline_lists_per_day():

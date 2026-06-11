@@ -230,6 +230,15 @@ if _UI_DIR is not None:
     log_event("agent.audit", "ui_mounted", path=str(_UI_DIR))
     _index = _UI_DIR / "index.html"
 
+    # index.html must NEVER be cached: it references hash-named JS/CSS, so a stale
+    # cached index would point at assets a new deploy has replaced -> a broken /
+    # corrupted-render bundle (the Thai-text symptom). The hashed /assets/* ARE
+    # immutable and stay cacheable (StaticFiles default).
+    _NO_STORE = {"Cache-Control": "no-store, no-cache, must-revalidate"}
+
+    def _index_response() -> FileResponse:
+        return FileResponse(_index, headers=_NO_STORE)
+
     app.mount(
         "/assets",
         StaticFiles(directory=str(_UI_DIR / "assets")),
@@ -238,7 +247,7 @@ if _UI_DIR is not None:
 
     @app.get("/")
     def spa_root() -> FileResponse:
-        return FileResponse(_index)
+        return _index_response()
 
     @app.get("/{path:path}")
     def spa_fallback(path: str) -> FileResponse:
@@ -246,7 +255,7 @@ if _UI_DIR is not None:
         candidate = _UI_DIR / path
         if candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(_index)
+        return _index_response()
 else:
     log_event(
         "agent.audit",

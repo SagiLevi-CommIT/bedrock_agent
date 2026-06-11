@@ -93,7 +93,10 @@ def get_data_coverage(patient_id: int, start: str, end: str, flow: str = "sleep_
     description=(
         "Fast 'does data exist, and on which days' for a patient+flow over a range "
         "(one migrated-data query, no downloads). Use before deciding to fetch or "
-        "visualize. Returns per-day file counts."
+        "visualize. Returns per-day file counts bucketed by **Asia/Jerusalem** day. "
+        "For an EXACT count on a specific day, pass a range covering that whole "
+        "local day (or use patient_timeline over a range) — a narrow UTC window "
+        "can split a local day's files and undercount."
     ),
     input_schema={"type": "object", "properties": dict(_RANGE_PROPS), "required": _RANGE_REQUIRED},
 )
@@ -275,9 +278,12 @@ def generate_visualization(patient_id: int, start: str, end: str, flow: str = "s
 )
 def visualize_rt_file(file_key: str) -> str:
     d = call_tool_api("POST", "/v1/visualize-rt-file", json_body={"file_key": file_key})
+    # Echo the resolved file_key back so later turns ("the one before", "those
+    # two files") can resolve against concrete state, not the model's memory.
     return (
-        f"rt_flow visualization job started: job_id={d['job_id']}. "
-        f"Poll get_job_status({d['job_id']}) for the viewer download link."
+        f"rt_flow visualization job started for file_key={file_key}: "
+        f"job_id={d['job_id']}. Poll get_job_status({d['job_id']}) for the viewer "
+        f"download link."
     )
 
 
@@ -287,8 +293,9 @@ def visualize_rt_file(file_key: str) -> str:
         "Per-day upload/coverage timeline for a patient over a date range, across "
         "BOTH flows (metadata only, no downloads). Answers 'when did they upload', "
         "'which days have sleep vs rt data', 'which days are missing', 'is there "
-        "enough to visualize'. Returns per-day sleep/rt file counts + per-flow "
-        "coverage completeness/gaps."
+        "enough to visualize'. Returns per-day sleep/rt file counts (bucketed by "
+        "**Asia/Jerusalem** local day) + per-flow coverage completeness/gaps. This "
+        "is the canonical source for per-day counts."
     ),
     input_schema={
         "type": "object",
@@ -454,6 +461,10 @@ def get_job_status(job_id: str) -> str:
 
     art = result.get("artifacts") or {}
     notes: list[str] = []
+    # Echo the concrete subject (rt-viz jobs return file_key) so cross-turn refs
+    # stay anchored to real state.
+    if result.get("file_key"):
+        notes.append(f"file_key={result['file_key']}")
     if art.get("standalone_url"):
         add_action("download_standalone", "Download viewer (HTML)", art["standalone_url"])
         notes.append("viewer ready")
